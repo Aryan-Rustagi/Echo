@@ -22,28 +22,35 @@ router.post('/', upload.single('audio'), async (req, res) => {
         const formData = new FormData();
         const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
         
+        const isGroq = Boolean(process.env.GROQ_API_KEY);
+        const apiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
+        const endpoint = isGroq
+            ? 'https://api.groq.com/openai/v1/audio/transcriptions'
+            : 'https://api.openai.com/v1/audio/transcriptions';
+        const model = isGroq ? 'whisper-large-v3-turbo' : 'whisper-1';
+
         formData.append('file', blob, req.file.originalname);
-        formData.append('model', 'whisper-large-v3-turbo');
+        formData.append('model', model);
         formData.append('response_format', 'json');
         
         // Whisper prompt helps guide the model to not hallucinate on background noise
         formData.append('prompt', 'Transcribe the following exactly. Do not output "Thank you." for silence.');
 
-        const groqResponse = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        const apiResponse = await fetch(endpoint, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+                'Authorization': `Bearer ${apiKey}`
             },
             body: formData
         });
 
-        if (!groqResponse.ok) {
-            const errorText = await groqResponse.text();
-            console.error("Groq API Error:", errorText);
-            return res.status(groqResponse.status).json({ error: "Transcription failed at Groq API" });
+        if (!apiResponse.ok) {
+            const errorText = await apiResponse.text();
+            console.error("STT API Error:", errorText);
+            return res.status(apiResponse.status).json({ error: "Transcription failed at STT API" });
         }
 
-        const data = await groqResponse.json();
+        const data = await apiResponse.json();
         console.log("Raw Transcription result:", data.text);
 
         // Filter out common Whisper silence hallucinations

@@ -1,98 +1,188 @@
-const API_BASE = "http://localhost:3000";
+import { API_BASE } from "../config";
+import { startMic, type MicController } from "./mic";
 
-export let mediaRecorder: MediaRecorder | null = null;
-export let socket: WebSocket | null = null;
-
-function pickMimeType(): string {
-  const candidates = [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/ogg;codecs=opus",
-    "audio/mp4",
-  ];
-  for (const type of candidates) {
-    if (MediaRecorder.isTypeSupported(type)) return type;
-  }
-  return "";
+export interface TranscriptionController {
+  stop(): Promise<void>;
 }
 
 /**
- * Fetch the Deepgram API key from our backend proxy (keeps it out of browser source).
+ * Fetch the ephemeral Deepgram grant token from our backend proxy.
  */
 async function getDeepgramKey(): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/stt-keys/deepgram-token`);
-  if (!res.ok) {
-    throw new Error("Failed to get Deepgram token from server");
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/stt-keys/deepgram-token`);
+  } catch (netErr: unknown) {
+    const netMessage = netErr instanceof Error ? netErr.message : String(netErr);
+    throw new Error(
+      `Cannot connect to backend (${netMessage}). Ensure the backend server is running on port 3000.`
+    );
   }
-  const data = await res.json();
-  return data.key;
+
+  if (!res.ok) {
+    let errMsg = `Backend returned status ${res.status}`;
+    try {
+      const errData = (await res.json()) as { error?: string };
+      if (errData && typeof errData.error === "string") {
+        errMsg = errData.error;
+      }
+    } catch (_parseErr) {
+      // ignore JSON parse error
+    }
+    throw new Error(errMsg);
+  }
+
+  const data = (await res.json()) as { token?: string; key?: string };
+  const token = data.token || data.key;
+  if (!token) {
+    throw new Error("No token returned by server");
+  }
+  return token;
 }
 
 export async function startRealtimeTranscription(
   onTranscript: (text: string, isFinal: boolean) => void,
-  onError: (err: Error) => void
-): Promise<void> {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error("Microphone API not supported in this browser.");
+  onError: (err: Error) => void,
+  onEndOfTurn?: () => void,
+  onSpeechStarted?: () => void
+): Promise<TranscriptionController> {
+  const apiKey = await getDeepgramKey();
+
+  let socket: WebSocket | null = null;
+  let micController: MicController | null = null;
+  let hasOpened = false;
+  let isStopped = false;
+
+  async function cleanup(): Promise<void> {
+    if (micController) {
+      const mc = micController;
+      micController = null;
+      await mc.stop();
+    }
   }
 
-  const apiKey = await getDeepgramKey();
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  
-  // Connect to Deepgram WebSocket
-  socket = new WebSocket('wss://api.deepgram.com/v1/listen?model=nova-2&smart_format=true', [
-    'token',
-    apiKey
-  ]);
+  // Connect to Deepgram WebSocket with raw PCM linear16 and VAD events
+  const wsUrl =
+    "wss://api.deepgram.com/v1/listen?model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true&smart_format=true";
 
-  socket.onmessage = (message) => {
+  socket = new WebSocket(wsUrl, ["bearer", apiKey]);
+
+  socket.onmessage = function handleMessage(message: MessageEvent) {
     try {
-      const received = JSON.parse(message.data);
-      if (received.channel && received.channel.alternatives && received.channel.alternatives.length > 0) {
-        const transcript = received.channel.alternatives[0].transcript;
-        if (transcript) {
-          onTranscript(transcript, received.is_final);
+      const received = JSON.parse(message.data as string) as {
+        type?: string;
+        channel?: {
+          alternatives?: Array<{ transcript?: string }>;
+        };
+        is_final?: boolean;
+        speech_final?: boolean;
+      };
+
+      // 1. Barge-in detection: user began speaking
+      if (received.type === "SpeechStarted") {
+        if (onSpeechStarted) {
+          onSpeechStarted();
         }
       }
-    } catch (e) {
+
+      // 2. Transcripts
+      if (
+        received.channel &&
+        received.channel.alternatives &&
+        received.channel.alternatives.length > 0
+      ) {
+        const transcript = received.channel.alternatives[0].transcript;
+        if (transcript) {
+          onTranscript(transcript, Boolean(received.is_final));
+        }
+      }
+
+      // 3. End-of-turn detection
+      if (received.speech_final === true || received.type === "UtteranceEnd") {
+        if (onEndOfTurn) {
+          onEndOfTurn();
+        }
+      }
+    } catch (e: unknown) {
       console.error("Error parsing Deepgram message", e);
     }
   };
 
-  socket.onerror = (error) => {
+  socket.onerror = function handleError(error: Event) {
     console.error("Deepgram WebSocket Error", error);
+    void cleanup();
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.close();
+    }
     onError(new Error("Deepgram connection failed. Please check the API key."));
   };
 
-  socket.onclose = () => {
+  socket.onclose = function handleClose() {
     console.log("Deepgram WebSocket closed.");
+    if (!hasOpened) {
+      void cleanup();
+    }
   };
 
-  socket.onopen = () => {
-    const mimeType = pickMimeType();
-    mediaRecorder = mimeType
-      ? new MediaRecorder(stream, { mimeType })
-      : new MediaRecorder(stream);
+  socket.onopen = async function handleOpen() {
+    hasOpened = true;
+    if (isStopped) {
+      void cleanup();
+      return;
+    }
 
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0 && socket?.readyState === WebSocket.OPEN) {
-        socket.send(event.data);
+    try {
+      micController = await startMic(function handleChunk(chunk: ArrayBuffer) {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(chunk);
+        }
+      });
+    } catch (micErr: unknown) {
+      const errorObj = micErr instanceof Error ? micErr : new Error(String(micErr));
+      onError(errorObj);
+    }
+  };
+
+  return {
+    stop: async function stop(): Promise<void> {
+      isStopped = true;
+      await cleanup();
+
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        const activeSocket = socket;
+        await new Promise<void>(function waitForClose(resolve) {
+          let resolved = false;
+          function finish() {
+            if (!resolved) {
+              resolved = true;
+              resolve();
+            }
+          }
+
+          const timeoutTimer = setTimeout(function handleTimeout() {
+            if (activeSocket.readyState === WebSocket.OPEN) {
+              activeSocket.close();
+            }
+            finish();
+          }, 800);
+
+          activeSocket.addEventListener("close", function handleSocketClose() {
+            clearTimeout(timeoutTimer);
+            finish();
+          });
+
+          try {
+            activeSocket.send(JSON.stringify({ type: "CloseStream" }));
+          } catch (_sendErr) {
+            clearTimeout(timeoutTimer);
+            activeSocket.close();
+            finish();
+          }
+        });
+      } else if (socket) {
+        socket.close();
       }
-    };
-    
-    // Start recording, emit data every 250ms
-    mediaRecorder.start(250);
+      socket = null;
+    },
   };
-}
-
-export function stopRealtimeTranscription(): void {
-  if (mediaRecorder) {
-    mediaRecorder.stop();
-    mediaRecorder.stream.getTracks().forEach((t) => t.stop());
-    mediaRecorder = null;
-  }
-  if (socket) {
-    socket.close();
-    socket = null;
-  }
 }

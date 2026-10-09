@@ -1,8 +1,6 @@
-import './App.css';
-import LandingPage from './LandingPage';
+import "./App.css";
+import LandingPage from "./LandingPage";
 
-function App() {
+export default function App() {
   return <LandingPage />;
 }
-
-export default App;

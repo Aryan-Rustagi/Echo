@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:3000";
+import { API_BASE } from "../config";
 
 export async function transcribe(blob: Blob): Promise<string> {
   const form = new FormData();
@@ -11,7 +11,9 @@ export async function transcribe(blob: Blob): Promise<string> {
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
+    const err = await res.json().catch(function handleJsonError() {
+      return {};
+    });
     throw new Error(err.error || "Transcription failed");
   }
 

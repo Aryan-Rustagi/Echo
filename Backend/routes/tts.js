@@ -44,12 +44,10 @@ router.post('/', async (req, res) => {
           return res.send(buffer);
         } else {
           const errorText = await response.text();
-          console.error(`[TTS] ElevenLabs FAILED (Status ${response.status}):`, errorText);
-          return res.status(500).json({ error: "ElevenLabs API Error: " + errorText });
+          console.warn(`[TTS] ElevenLabs FAILED (Status ${response.status}): ${errorText}. Falling back to Edge TTS...`);
         }
       } catch (err) {
-        console.error("[TTS] Network/Execution error calling ElevenLabs:", err.message);
-        return res.status(500).json({ error: "Failed to connect to ElevenLabs: " + err.message });
+        console.warn("[TTS] Error calling ElevenLabs:", err.message, ". Falling back to Edge TTS...");
       }
     } else {
       console.warn("[TTS] ELEVENLABS_API_KEY not found in process.env!");
