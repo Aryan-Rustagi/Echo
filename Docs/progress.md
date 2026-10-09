@@ -183,5 +183,23 @@ non-streaming LLM fallback.
    - If streaming stalls or times out, the client automatically aborts the stream and fails over to the non-streaming `/api/chat` endpoint, preventing the UI from getting permanently stuck in "thinking".
 3. **Immediate Browser SpeechSynthesis for First Audio (`tts.ts`):**
    - Placed browser `SpeechSynthesis` on the immediate critical path in the sentence audio queue (`enqueueSentence`), eliminating remote HTTP latency before speech begins.
-   - Playback starts immediately as soon as the first sentence boundary is parsed, delivering lowest time-to-first-audio.
+
+## Phase 6: Gemini Flash Migration & Low-Latency LLM Streaming
+
+### [Date: Oct 9, 2026] - Google Gemini Flash Integration (`Geminie-try` branch)
+**What was done:**
+1. **Google Gemini Flash Backend Support (`Backend/routes/chat.js`):**
+   - Implemented native Gemini Flash integration for non-streaming (`POST /api/chat`) and SSE streaming (`POST /api/chat/stream`).
+   - Mapped message conversation history to Gemini's `user`/`model` structure via `formatGeminiContents()`, with system instructions passed in `system_instruction`.
+   - Streaming consumes `models/${geminiModel}:streamGenerateContent?alt=sse` and converts `candidates[0].content.parts[*].text` deltas into standard `data: {"token": "..."}\n\n` SSE events.
+   - Defaults to model `gemini-flash-latest` (configurable via `GEMINI_MODEL`) when `GEMINI_API_KEY` is provided.
+   - Retains seamless fallback to OpenAI (`gpt-4o-mini`) and Groq if `GEMINI_API_KEY` is absent.
+2. **Environment Template Updates (`Backend/.env.example`):**
+   - Added `GEMINI_API_KEY` and `GEMINI_MODEL=gemini-flash-latest`.
+3. **Frontend Watchdog Precision (`Frontend/Echo/src/pipeline/llm.ts`):**
+   - Cleared the 2.5-second stream stall watchdog timeout immediately once response body streaming begins, preventing active streaming responses from aborting mid-sentence.
+4. **LLM Provider Selector & Automated Fallback (`LandingPage.tsx` & `chat.js`):**
+   - Added an LLM selection dropdown in `LandingPage.tsx` next to the STT selector ("Gemini Flash" / "OpenAI (GPT-4o-mini)").
+   - Passed `provider` parameter through `streamResponse` and `getResponse`.
+   - Wired automated fallback in `chat.js`: if Gemini stream or request fails, the server automatically catches the exception and falls back to OpenAI stream, preventing turn abandonment.
 

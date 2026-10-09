@@ -191,3 +191,19 @@ regular chat endpoint so a provider failure cannot block the turn forever.
 **Resolution:** The sentence queue now uses browser SpeechSynthesis immediately.
 Remote TTS is no longer on the critical path, so speech starts as soon as the
 first complete response sentence is available.
+
+## 34. Transition to Gemini Flash Model & Streaming Watchdog Scope
+**Problem:** The pipeline required a faster, lower-latency LLM provider than standard OpenAI/Groq endpoints to minimize conversational turn latency, and the client-side streaming watchdog timer was not cleared after stream connection, causing responses exceeding 2.5 seconds to prematurely abort.
+
+**Resolution:**
+1. Integrated Google Gemini Flash (`gemini-flash-latest`) as the primary LLM provider in `Backend/routes/chat.js` for both non-streaming (`POST /api/chat`) and SSE streaming (`POST /api/chat/stream`). Formatted conversation turns into Gemini's `user`/`model` structure with `system_instruction` support.
+2. Cleared the TTFT watchdog timeout in `Frontend/Echo/src/pipeline/llm.ts` immediately upon response stream body establishment, ensuring active generation is never interrupted mid-sentence while preserving the 2.5-second timeout for stalled upstream connections.
+3. Preserved fallback to OpenAI/Groq when `GEMINI_API_KEY` is not set.
+
+## 35. LLM Provider Selection and Automated Gemini-to-OpenAI Fallback
+**Problem:** Users lacked an interface control to choose between Gemini Flash and OpenAI, and if the Gemini API encountered rate limits or errors, the conversational turn failed completely rather than falling back to OpenAI.
+
+**Resolution:**
+1. Added an LLM selector dropdown in `Frontend/Echo/src/LandingPage.tsx` alongside the STT engine selector, allowing dynamic selection between "Gemini Flash" and "OpenAI (GPT-4o-mini)".
+2. Updated `Frontend/Echo/src/pipeline/llm.ts` to pass the `provider` parameter in `/api/chat` and `/api/chat/stream`.
+3. Structured `Backend/routes/chat.js` with automated fallback: when `gemini` is selected, the server attempts Gemini Flash streaming; if Gemini fails or throws an upstream error, the backend automatically catches the exception and falls back to OpenAI streaming seamlessly.

@@ -7,7 +7,7 @@ Echo is a from-scratch voice AI pipeline built for sub-second, natural conversat
 * **Backend**: Express 5 + Node.js (SSE Streaming & Proxy)
 * **Realtime STT**: Deepgram Nova-3 / Speechmatics RT (Raw PCM WebSockets)
 * **Fallback STT**: Whisper via `/api/transcribe` (multipart/form-data)
-* **LLM**: Groq / OpenAI (`/api/chat/stream` with Server-Sent Events)
+* **LLM**: Google Gemini Flash (`gemini-flash-latest`) / OpenAI / Groq (`/api/chat/stream` with Server-Sent Events)
 * **TTS**: ElevenLabs Flash v2.5 with Web SpeechSynthesis watchdog fallback
 
 ---
@@ -73,10 +73,10 @@ We support two distinct STT architectures:
 ## Current Reliable Voice-Agent Run Path
 
 The recommended local path is Speechmatics realtime PCM transcription,
-OpenAI response generation, and browser SpeechSynthesis:
+Gemini Flash response generation, and browser SpeechSynthesis:
 
 ```text
-Speechmatics -> silence detection -> OpenAI -> sentence queue -> browser TTS
+Speechmatics -> silence detection -> Gemini Flash (OpenAI fallback) -> sentence queue -> browser TTS
 ```
 
 Speechmatics is the default engine because its short-lived token endpoint is

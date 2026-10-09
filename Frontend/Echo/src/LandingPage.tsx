@@ -3,7 +3,7 @@ import { startRealtimeTranscription, type TranscriptionController } from "./pipe
 import { startSpeechmaticsTranscription } from "./pipeline/speechmatics";
 import { startRecording, stopRecording } from "./pipeline/recorder";
 import { transcribe } from "./pipeline/stt";
-import { streamResponse, type Message } from "./pipeline/llm";
+import { streamResponse, type Message, type LlmProvider } from "./pipeline/llm";
 import { createSentenceSplitter } from "./pipeline/sentences";
 import {
   enqueueSentence,
@@ -23,6 +23,7 @@ interface FinishTurnFn {
 export default function LandingPage() {
   const [status, setStatus] = useState<Status>("idle");
   const [engine, setEngine] = useState<Engine>("speechmatics");
+  const [llmProvider, setLlmProvider] = useState<LlmProvider>("gemini");
   const [continuousMode, setContinuousMode] = useState<boolean>(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [transcript, setTranscript] = useState("");
@@ -38,6 +39,7 @@ export default function LandingPage() {
   const turnActiveRef = useRef<boolean>(false);
   const isFallbackRef = useRef<boolean>(false);
   const continuousModeRef = useRef<boolean>(false);
+  const llmProviderRef = useRef<LlmProvider>("gemini");
   const transcriptionControllerRef = useRef<TranscriptionController | null>(null);
   const finishTurnRef = useRef<FinishTurnFn | null>(null);
   const turnAbortControllerRef = useRef<AbortController | null>(null);
@@ -227,7 +229,8 @@ export default function LandingPage() {
             return prev + token;
           });
         },
-        turnAbortController.signal
+        turnAbortController.signal,
+        llmProviderRef.current
       );
 
       splitter.flush();
@@ -376,6 +379,12 @@ export default function LandingPage() {
     setEngine(e.target.value as Engine);
   }
 
+  function handleLlmProviderChange(e: React.ChangeEvent<HTMLSelectElement>): void {
+    const chosen = e.target.value as LlmProvider;
+    setLlmProvider(chosen);
+    llmProviderRef.current = chosen;
+  }
+
   return (
     <div className="container">
       <h1>ECHO</h1>
@@ -387,9 +396,23 @@ export default function LandingPage() {
           value={engine}
           onChange={handleEngineChange}
           disabled={status !== "idle" && status !== "error"}
+          aria-label="Select STT engine"
+          title="Speech-to-Text Engine"
         >
-          <option value="deepgram">Deepgram</option>
           <option value="speechmatics">Speechmatics</option>
+          <option value="deepgram">Deepgram</option>
+        </select>
+
+        <select
+          className="engine-select"
+          value={llmProvider}
+          onChange={handleLlmProviderChange}
+          disabled={status !== "idle" && status !== "error"}
+          aria-label="Select LLM model"
+          title="LLM Model"
+        >
+          <option value="gemini">Gemini Flash</option>
+          <option value="openai">OpenAI (GPT-4o-mini)</option>
         </select>
 
         <button
