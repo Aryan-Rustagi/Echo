@@ -32,7 +32,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
         const groqResponse = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${process.env.GROK_API}`
+                'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
             },
             body: formData
         });
