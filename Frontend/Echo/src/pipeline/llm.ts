@@ -1,8 +1,12 @@
 import { API_BASE } from "../config";
 
 export type Message = { role: "user" | "assistant"; content: string };
+export type LlmProvider = "gemini" | "openai";
 
-export async function getResponse(input: string | Message[]): Promise<string> {
+export async function getResponse(
+  input: string | Message[],
+  provider?: LlmProvider
+): Promise<string> {
   const messages: Message[] = typeof input === "string"
     ? [{ role: "user", content: input }]
     : input;
@@ -12,7 +16,10 @@ export async function getResponse(input: string | Message[]): Promise<string> {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({
+      messages: messages,
+      provider: provider || "gemini",
+    }),
   });
 
   if (!res.ok) {
@@ -29,7 +36,8 @@ export async function getResponse(input: string | Message[]): Promise<string> {
 export async function streamResponse(
   input: string | Message[],
   onToken: (token: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  provider?: LlmProvider
 ): Promise<string> {
   const messages: Message[] = typeof input === "string"
     ? [{ role: "user", content: input }]
@@ -51,7 +59,10 @@ export async function streamResponse(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({
+        messages: messages,
+        provider: provider || "gemini",
+      }),
       signal: requestController.signal,
     });
   } catch (err) {
@@ -60,7 +71,7 @@ export async function streamResponse(
     if (signal?.aborted) {
       throw err;
     }
-    const fallback = await getResponse(messages);
+    const fallback = await getResponse(messages, provider);
     onToken(fallback);
     return fallback;
   }
@@ -79,6 +90,8 @@ export async function streamResponse(
     signal?.removeEventListener("abort", abortRequest);
     throw new Error("No response body received from server");
   }
+
+  clearTimeout(timeout);
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder("utf-8");
@@ -122,7 +135,7 @@ export async function streamResponse(
     if (signal?.aborted) {
       throw err;
     }
-    const fallback = await getResponse(messages);
+    const fallback = await getResponse(messages, provider);
     if (!accumulated) {
       onToken(fallback);
       accumulated = fallback;
