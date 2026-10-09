@@ -1,9 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-// TTS endpoint using browser-compatible approach.
-// Edge TTS requires a WebSocket connection to Microsoft's service.
-// We use the free edge-tts approach: generate speech server-side and return audio.
+// TTS endpoint
 router.post('/', async (req, res) => {
   try {
     const { text } = req.body;
@@ -11,7 +9,53 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: "No text provided" });
     }
 
-    // Use Microsoft Edge TTS via their free API endpoint
+    // Attempt to use ElevenLabs if the API key is configured
+    const rawKey = process.env.ELEVENLABS_API_KEY;
+    if (rawKey) {
+      const apiKey = rawKey.trim();
+      try {
+        const voiceId = "21m00Tcm4TlvDq8ikWAM"; // Rachel voice
+        console.log(`[TTS] Generating speech with ElevenLabs (Voice: Rachel, Key: ${apiKey.slice(0, 8)}...) for text: "${text.slice(0, 40)}"`);
+
+        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
+          method: "POST",
+          headers: {
+            "xi-api-key": apiKey,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            text: text,
+            model_id: "eleven_multilingual_v2",
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.5
+            }
+          })
+        });
+
+        if (response.ok) {
+          const arrayBuffer = await response.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          console.log(`[TTS] ElevenLabs SUCCESS! Returning MP3 buffer (${buffer.length} bytes)`);
+          res.set({
+            'Content-Type': 'audio/mpeg',
+            'Content-Length': buffer.length,
+          });
+          return res.send(buffer);
+        } else {
+          const errorText = await response.text();
+          console.error(`[TTS] ElevenLabs FAILED (Status ${response.status}):`, errorText);
+          return res.status(500).json({ error: "ElevenLabs API Error: " + errorText });
+        }
+      } catch (err) {
+        console.error("[TTS] Network/Execution error calling ElevenLabs:", err.message);
+        return res.status(500).json({ error: "Failed to connect to ElevenLabs: " + err.message });
+      }
+    } else {
+      console.warn("[TTS] ELEVENLABS_API_KEY not found in process.env!");
+    }
+
+    // Fallback: Use Microsoft Edge TTS via their free API endpoint
     const voice = "en-US-AriaNeural";
     const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>
       <voice name='${voice}'>${escapeXml(text)}</voice>
