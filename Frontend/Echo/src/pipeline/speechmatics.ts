@@ -1,3 +1,5 @@
+const API_BASE = "http://localhost:3000";
+
 export let mediaRecorder: MediaRecorder | null = null;
 export let socket: WebSocket | null = null;
 
@@ -14,8 +16,21 @@ function pickMimeType(): string {
   return "";
 }
 
+/**
+ * Fetch a short-lived Speechmatics JWT from our backend proxy.
+ */
+async function getSpeechmaticsJwt(): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/stt-keys/speechmatics-token`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw new Error("Failed to get Speechmatics token from server");
+  }
+  const data = await res.json();
+  return data.jwt;
+}
+
 export async function startSpeechmaticsTranscription(
-  apiKey: string,
   onTranscript: (text: string, isFinal: boolean) => void,
   onError: (err: Error) => void
 ): Promise<void> {
@@ -24,21 +39,8 @@ export async function startSpeechmaticsTranscription(
   }
 
   try {
-    // 1. Fetch short-lived JWT using the API key
-    const res = await fetch("https://mp.speechmatics.com/v1/api_keys?type=rt", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ ttl: 3600 }),
-    });
-
-    if (!res.ok) {
-      throw new Error(`Failed to authenticate with Speechmatics: ${res.statusText}`);
-    }
-
-    const { key_value: jwt } = await res.json();
+    // 1. Fetch short-lived JWT from our backend proxy
+    const jwt = await getSpeechmaticsJwt();
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -116,7 +118,6 @@ export function stopSpeechmaticsTranscription(): void {
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ message: "EndOfStream", last_seq_no: 0 }));
     }
-    // We can just close it directly or wait for server to close. We'll close to be safe.
     socket.close();
     socket = null;
   }

@@ -1,3 +1,5 @@
+const API_BASE = "http://localhost:3000";
+
 export let mediaRecorder: MediaRecorder | null = null;
 export let socket: WebSocket | null = null;
 
@@ -14,8 +16,19 @@ function pickMimeType(): string {
   return "";
 }
 
+/**
+ * Fetch the Deepgram API key from our backend proxy (keeps it out of browser source).
+ */
+async function getDeepgramKey(): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/stt-keys/deepgram-token`);
+  if (!res.ok) {
+    throw new Error("Failed to get Deepgram token from server");
+  }
+  const data = await res.json();
+  return data.key;
+}
+
 export async function startRealtimeTranscription(
-  apiKey: string,
   onTranscript: (text: string, isFinal: boolean) => void,
   onError: (err: Error) => void
 ): Promise<void> {
@@ -23,6 +36,7 @@ export async function startRealtimeTranscription(
     throw new Error("Microphone API not supported in this browser.");
   }
 
+  const apiKey = await getDeepgramKey();
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   
   // Connect to Deepgram WebSocket
