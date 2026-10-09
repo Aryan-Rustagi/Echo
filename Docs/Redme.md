@@ -5,3 +5,4 @@ Echo is a from-scratch voice AI pipeline built in 3 days. It captures speech fro
 * **Frontend**: React
 * **Backend**: Express
 * **Pipeline Framework**: STT (Speech-to-Text) ➔ LLM (Large Language Model) ➔ TTS (Text-to-Speech)
+* **Real-Time STT Engines**: Deepgram, Speechmatics (WebSocket integration)
