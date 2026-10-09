@@ -1,108 +1,260 @@
-const API_BASE = "http://localhost:3000";
+interface QueueItem {
+  id: number;
+  text: string;
+  abortController: AbortController;
+  audioPromise: Promise<AudioBuffer | null>;
+}
 
-/**
- * Speak text using Edge TTS (via backend) with browser SpeechSynthesis as fallback.
- * Returns a promise that resolves when speech finishes.
- */
-export async function speak(text: string): Promise<void> {
-  if (!text.trim()) return;
+let audioContext: AudioContext | null = null;
+let queue: QueueItem[] = [];
+let isPlaying = false;
+let currentSourceNode: AudioBufferSourceNode | null = null;
+let nextItemId = 1;
+let onFirstAudioCallback: (() => void) | null = null;
+let firstAudioFired = false;
+let queueDrainResolvers: (() => void)[] = [];
 
-  try {
-    console.log("[TTS] Requesting speech from backend for:", text);
-    const res = await fetch(`${API_BASE}/api/tts`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
+export function getAudioContext(): AudioContext {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+  }
+  return audioContext;
+}
 
-    console.log("[TTS] Backend responded with status:", res.status, res.statusText);
-
-    if (res.ok && res.status !== 204) {
-      const audioBlob = await res.blob();
-      console.log("[TTS] Received audio blob size:", audioBlob.size, "type:", audioBlob.type);
-      if (audioBlob.size > 0) {
-        return await playAudioBlob(audioBlob);
-      }
-    }
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      console.error("[TTS] Backend error:", res.status, errText);
-    }
-
-    // Fallback to browser SpeechSynthesis
-    console.warn("[TTS] Falling back to browser SpeechSynthesis");
-    return speakWithBrowserTTS(text);
-  } catch (err) {
-    console.warn("[TTS] Fetch failed, falling back to browser SpeechSynthesis:", err);
-    return speakWithBrowserTTS(text);
+export async function resumeAudioContext(): Promise<void> {
+  const ctx = getAudioContext();
+  if (ctx.state === "suspended") {
+    await ctx.resume();
   }
 }
 
-function playAudioBlob(blob: Blob): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
+export function setOnFirstAudio(callback: (() => void) | null): void {
+  onFirstAudioCallback = callback;
+  firstAudioFired = false;
+}
 
-    audio.oncanplaythrough = () => {
-      console.log("[TTS] Audio ready to play");
+function loadVoices(): Promise<SpeechSynthesisVoice[]> {
+  return new Promise(function resolveVoices(resolve) {
+    if (!window.speechSynthesis) {
+      return resolve([]);
+    }
+    const existing = window.speechSynthesis.getVoices();
+    if (existing.length > 0) {
+      return resolve(existing);
+    }
+
+    let done = false;
+    function finish() {
+      if (!done) {
+        done = true;
+        resolve(window.speechSynthesis ? window.speechSynthesis.getVoices() : []);
+      }
+    }
+
+    const timer = setTimeout(finish, 1000);
+    window.speechSynthesis.onvoiceschanged = function handleVoicesChanged() {
+      clearTimeout(timer);
+      finish();
     };
-
-    audio.onended = () => {
-      console.log("[TTS] Audio playback finished");
-      URL.revokeObjectURL(url);
-      resolve();
-    };
-
-    audio.onerror = (e) => {
-      URL.revokeObjectURL(url);
-      console.warn("[TTS] Audio element error:", e);
-      reject(e);
-    };
-
-    audio.play().catch((err) => {
-      console.error("[TTS] audio.play() was rejected by browser:", err);
-      reject(err);
-    });
   });
 }
 
-function speakWithBrowserTTS(text: string): Promise<void> {
-  return new Promise((resolve, _reject) => {
+export function speakWithBrowserTTS(text: string): Promise<void> {
+  return new Promise(async function handleSpeech(resolve) {
     if (!window.speechSynthesis) {
-      console.warn("SpeechSynthesis not available");
-      resolve();
-      return;
+      return resolve();
     }
 
-    // Cancel any ongoing speech
     window.speechSynthesis.cancel();
+    const voices = await loadVoices();
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "en-US";
     utterance.rate = 1.0;
-    utterance.pitch = 1.15; // Set higher pitch for a female tone
 
-    // Try to pick an English female voice
-    const voices = window.speechSynthesis.getVoices();
-    const femaleVoice = voices.find((v) =>
-      v.lang.startsWith("en") &&
-      /zira|female|samantha|victoria|aria|jenny|natural|susan|hazel|karen/i.test(v.name)
-    ) || voices.find((v) =>
-      v.lang.startsWith("en") && !/david|mark|george|male|guy/i.test(v.name)
-    );
-
-    if (femaleVoice) {
-      console.log("[TTS] Selected female browser voice:", femaleVoice.name);
-      utterance.voice = femaleVoice;
+    let preferredVoice: SpeechSynthesisVoice | undefined;
+    for (let i = 0; i < voices.length; i += 1) {
+      const v = voices[i];
+      if (v.lang.startsWith("en") && /zira|female|samantha|victoria|aria|jenny|natural|susan|hazel|karen/i.test(v.name)) {
+        preferredVoice = v;
+        break;
+      }
+    }
+    if (!preferredVoice) {
+      for (let i = 0; i < voices.length; i += 1) {
+        const v = voices[i];
+        if (v.lang.startsWith("en") && !/david|mark|george|male|guy/i.test(v.name)) {
+          preferredVoice = v;
+          break;
+        }
+      }
     }
 
-    utterance.onend = () => resolve();
-    utterance.onerror = (e) => {
-      console.warn("Browser TTS error:", e);
-      resolve();
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    let finished = false;
+    function complete() {
+      if (!finished) {
+        finished = true;
+        clearTimeout(watchdogTimer);
+        resolve();
+      }
+    }
+
+    const watchdogMs = text.length * 90 + 3000;
+    const watchdogTimer = setTimeout(function handleWatchdog() {
+      console.warn("[TTS] Browser SpeechSynthesis watchdog triggered for text:", text.slice(0, 30));
+      try {
+        window.speechSynthesis.cancel();
+      } catch (_e) {
+        // ignore
+      }
+      complete();
+    }, watchdogMs);
+
+    utterance.onend = function handleEnd() {
+      complete();
+    };
+
+    utterance.onerror = function handleError(e: SpeechSynthesisErrorEvent) {
+      console.warn("[TTS] SpeechSynthesis error:", e.error);
+      complete();
     };
 
     window.speechSynthesis.speak(utterance);
+  });
+}
+
+async function processQueue(): Promise<void> {
+  if (isPlaying) {
+    return;
+  }
+
+  if (queue.length === 0) {
+    const resolvers = queueDrainResolvers;
+    queueDrainResolvers = [];
+    for (let i = 0; i < resolvers.length; i += 1) {
+      resolvers[i]();
+    }
+    return;
+  }
+
+  isPlaying = true;
+  const item = queue.shift();
+  if (!item) {
+    isPlaying = false;
+    return;
+  }
+
+  // Browser speech starts immediately; remote TTS must not block the queue.
+  const audioBuffer = await item.audioPromise;
+
+  // Signal first audio start for timing and UI state
+  if (!firstAudioFired) {
+    firstAudioFired = true;
+    if (onFirstAudioCallback) {
+      onFirstAudioCallback();
+    }
+  }
+
+  if (audioBuffer) {
+    await new Promise<void>(function playBuffer(resolve) {
+      const ctx = getAudioContext();
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      currentSourceNode = source;
+
+      source.onended = function handleEnded() {
+        currentSourceNode = null;
+        resolve();
+      };
+
+      source.start(0);
+    });
+  } else {
+    // Fall back to browser SpeechSynthesis for this sentence
+    await speakWithBrowserTTS(item.text);
+  }
+
+  isPlaying = false;
+  void processQueue();
+}
+
+export function enqueueSentence(text: string, turnSignal?: AbortSignal): void {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return;
+  }
+
+  if (turnSignal && turnSignal.aborted) {
+    return;
+  }
+
+  const abortController = new AbortController();
+
+  if (turnSignal) {
+    turnSignal.addEventListener("abort", function handleTurnAbort() {
+      abortController.abort();
+    });
+  }
+
+  const item: QueueItem = {
+    id: nextItemId += 1,
+    text: trimmed,
+    abortController: abortController,
+    audioPromise: Promise.resolve(null),
+  };
+
+  queue.push(item);
+  void processQueue();
+}
+
+export function stopAll(): void {
+  for (let i = 0; i < queue.length; i += 1) {
+    try {
+      queue[i].abortController.abort();
+    } catch (_e) {
+      // ignore
+    }
+  }
+  queue = [];
+
+  if (currentSourceNode) {
+    try {
+      currentSourceNode.stop();
+      currentSourceNode.disconnect();
+    } catch (_e) {
+      // ignore
+    }
+    currentSourceNode = null;
+  }
+
+  if (window.speechSynthesis) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch (_e) {
+      // ignore
+    }
+  }
+
+  isPlaying = false;
+  firstAudioFired = false;
+
+  const resolvers = queueDrainResolvers;
+  queueDrainResolvers = [];
+  for (let i = 0; i < resolvers.length; i += 1) {
+    resolvers[i]();
+  }
+}
+
+export function waitForQueueDrain(): Promise<void> {
+  if (!isPlaying && queue.length === 0) {
+    return Promise.resolve();
+  }
+  return new Promise<void>(function registerResolver(resolve) {
+    queueDrainResolvers.push(resolve);
   });
 }

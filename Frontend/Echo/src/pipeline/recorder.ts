@@ -9,14 +9,16 @@ function pickMimeType(): string {
     "audio/ogg;codecs=opus",
     "audio/mp4",
   ];
-  for (const type of candidates) {
-    if (MediaRecorder.isTypeSupported(type)) return type;
+  for (let i = 0; i < candidates.length; i += 1) {
+    if (MediaRecorder.isTypeSupported(candidates[i])) {
+      return candidates[i];
+    }
   }
   return "";
 }
 
 export async function startRecording(): Promise<void> {
-  if (!navigator.mediaDevices?.getUserMedia) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     throw new Error("Microphone API not supported in this browser.");
   }
 
@@ -28,21 +30,30 @@ export async function startRecording(): Promise<void> {
     : new MediaRecorder(stream);
 
   chunks = [];
-  mediaRecorder.ondataavailable = (e) => {
-    if (e.data.size > 0) chunks.push(e.data);
+  mediaRecorder.ondataavailable = function handleData(e: BlobEvent) {
+    if (e.data.size > 0) {
+      chunks.push(e.data);
+    }
   };
 
   mediaRecorder.start();
 }
 
 export function stopRecording(): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    if (!mediaRecorder) return reject(new Error("Not recording"));
+  return new Promise(function handleStopPromise(resolve, reject) {
+    if (!mediaRecorder) {
+      return reject(new Error("Not recording"));
+    }
 
-    mediaRecorder.onstop = () => {
+    mediaRecorder.onstop = function handleMediaStop() {
       const type = mediaRecorder?.mimeType || mimeType || "audio/webm";
-      const blob = new Blob(chunks, { type });
-      mediaRecorder?.stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(chunks, { type: type });
+      if (mediaRecorder) {
+        const tracks = mediaRecorder.stream.getTracks();
+        for (let i = 0; i < tracks.length; i += 1) {
+          tracks[i].stop();
+        }
+      }
       mediaRecorder = null;
       resolve(blob);
     };

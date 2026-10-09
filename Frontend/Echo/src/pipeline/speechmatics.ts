@@ -1,124 +1,203 @@
-const API_BASE = "http://localhost:3000";
+import { API_BASE } from "../config";
+import { startMic, type MicController } from "./mic";
 
-export let mediaRecorder: MediaRecorder | null = null;
-export let socket: WebSocket | null = null;
-
-function pickMimeType(): string {
-  const candidates = [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/ogg;codecs=opus",
-    "audio/mp4",
-  ];
-  for (const type of candidates) {
-    if (MediaRecorder.isTypeSupported(type)) return type;
-  }
-  return "";
+export interface TranscriptionController {
+  stop(): Promise<void>;
 }
 
 /**
  * Fetch a short-lived Speechmatics JWT from our backend proxy.
  */
 async function getSpeechmaticsJwt(): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/stt-keys/speechmatics-token`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    throw new Error("Failed to get Speechmatics token from server");
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/stt-keys/speechmatics-token`, {
+      method: "POST",
+    });
+  } catch (netErr: unknown) {
+    const netMessage = netErr instanceof Error ? netErr.message : String(netErr);
+    throw new Error(
+      `Cannot connect to backend (${netMessage}). Ensure the backend server is running on port 3000.`
+    );
   }
-  const data = await res.json();
+
+  if (!res.ok) {
+    let errMsg = `Backend returned status ${res.status}`;
+    try {
+      const errData = (await res.json()) as { error?: string };
+      if (errData && typeof errData.error === "string") {
+        errMsg = errData.error;
+      }
+    } catch (_parseErr) {
+      // ignore JSON parse error
+    }
+    throw new Error(errMsg);
+  }
+
+  const data = (await res.json()) as { jwt?: string };
+  if (!data.jwt) {
+    throw new Error("No JWT returned by server");
+  }
   return data.jwt;
 }
 
 export async function startSpeechmaticsTranscription(
   onTranscript: (text: string, isFinal: boolean) => void,
   onError: (err: Error) => void
-): Promise<void> {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error("Microphone API not supported in this browser.");
+): Promise<TranscriptionController> {
+  const jwt = await getSpeechmaticsJwt();
+
+  let socket: WebSocket | null = null;
+  let micController: MicController | null = null;
+  let hasOpened = false;
+  let isStopped = false;
+  let audioChunksCount = 0;
+  let endOfTranscriptResolver: (() => void) | null = null;
+
+  async function cleanup(): Promise<void> {
+    if (micController) {
+      const mc = micController;
+      micController = null;
+      await mc.stop();
+    }
   }
 
-  try {
-    // 1. Fetch short-lived JWT from our backend proxy
-    const jwt = await getSpeechmaticsJwt();
+  socket = new WebSocket(`wss://eu2.rt.speechmatics.com/v2?jwt=${jwt}`);
 
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-    // 2. Connect to Speechmatics WebSocket
-    socket = new WebSocket(`wss://eu2.rt.speechmatics.com/v2?jwt=${jwt}`);
-
-    socket.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-
-        if (message.message === "AddPartialTranscript") {
-          const text = message.metadata.transcript;
-          if (text) onTranscript(text, false);
-        } else if (message.message === "AddTranscript") {
-          const text = message.metadata.transcript;
-          if (text) onTranscript(text, true);
-        } else if (message.message === "Error") {
-          onError(new Error(`Speechmatics Error: ${message.reason}`));
-        }
-      } catch (e) {
-        console.error("Error parsing Speechmatics message", e);
-      }
-    };
-
-    socket.onerror = (error) => {
-      console.error("Speechmatics WebSocket Error", error);
-      onError(new Error("Speechmatics connection failed."));
-    };
-
-    socket.onclose = () => {
-      console.log("Speechmatics WebSocket closed.");
-    };
-
-    socket.onopen = () => {
-      // 3. Send StartRecognition message
-      socket?.send(
-        JSON.stringify({
-          message: "StartRecognition",
-          audio_format: {
-            type: "file",
-          },
-          transcription_config: {
-            language: "en",
-            enable_partials: true,
-          },
-        })
-      );
-
-      // 4. Start recording and sending audio
-      const mimeType = pickMimeType();
-      mediaRecorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0 && socket?.readyState === WebSocket.OPEN) {
-          socket.send(e.data);
-        }
+  socket.onmessage = async function handleMessage(event: MessageEvent) {
+    try {
+      const message = JSON.parse(event.data as string) as {
+        message?: string;
+        metadata?: { transcript?: string };
+        reason?: string;
       };
 
-      mediaRecorder.start(250);
-    };
-  } catch (err: any) {
-    onError(err);
-  }
-}
+      if (message.message === "RecognitionStarted") {
+        if (isStopped) {
+          void cleanup();
+          return;
+        }
 
-export function stopSpeechmaticsTranscription(): void {
-  if (mediaRecorder) {
-    mediaRecorder.stop();
-    mediaRecorder.stream.getTracks().forEach((t) => t.stop());
-    mediaRecorder = null;
-  }
-  if (socket) {
-    if (socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ message: "EndOfStream", last_seq_no: 0 }));
+        try {
+          micController = await startMic(function handleChunk(chunk: ArrayBuffer) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+              audioChunksCount += 1;
+              socket.send(chunk);
+            }
+          });
+        } catch (micErr: unknown) {
+          const errorObj = micErr instanceof Error ? micErr : new Error(String(micErr));
+          onError(errorObj);
+        }
+      } else if (message.message === "AddPartialTranscript") {
+        const text = message.metadata?.transcript;
+        if (text) {
+          onTranscript(text, false);
+        }
+      } else if (message.message === "AddTranscript") {
+        const text = message.metadata?.transcript;
+        if (text) {
+          onTranscript(text, true);
+        }
+      } else if (message.message === "EndOfTranscript") {
+        if (endOfTranscriptResolver) {
+          endOfTranscriptResolver();
+          endOfTranscriptResolver = null;
+        }
+      } else if (message.message === "Error") {
+        void cleanup();
+        onError(new Error(`Speechmatics Error: ${message.reason ?? "Unknown error"}`));
+      }
+    } catch (e: unknown) {
+      console.error("Error parsing Speechmatics message", e);
     }
-    socket.close();
-    socket = null;
-  }
+  };
+
+  socket.onerror = function handleError(error: Event) {
+    console.error("Speechmatics WebSocket Error", error);
+    void cleanup();
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.close();
+    }
+    onError(new Error("Speechmatics connection failed."));
+  };
+
+  socket.onclose = function handleClose() {
+    console.log("Speechmatics WebSocket closed.");
+    if (!hasOpened) {
+      void cleanup();
+    }
+  };
+
+  socket.onopen = function handleOpen() {
+    hasOpened = true;
+    if (isStopped) {
+      void cleanup();
+      return;
+    }
+
+    // Send StartRecognition with raw pcm_s16le 16000Hz format
+    socket?.send(
+      JSON.stringify({
+        message: "StartRecognition",
+        audio_format: {
+          type: "raw",
+          encoding: "pcm_s16le",
+          sample_rate: 16000,
+        },
+        transcription_config: {
+          language: "en",
+          enable_partials: true,
+        },
+      })
+    );
+  };
+
+  return {
+    stop: async function stop(): Promise<void> {
+      isStopped = true;
+      await cleanup();
+
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        const activeSocket = socket;
+
+        try {
+          activeSocket.send(
+            JSON.stringify({
+              message: "EndOfStream",
+              last_seq_no: audioChunksCount,
+            })
+          );
+        } catch (_err) {
+          // ignore send error
+        }
+
+        await new Promise<void>(function waitForEndOfTranscript(resolve) {
+          let resolved = false;
+          function finish() {
+            if (!resolved) {
+              resolved = true;
+              resolve();
+            }
+          }
+
+          const timeoutTimer = setTimeout(function handleTimeout() {
+            finish();
+          }, 1200);
+
+          endOfTranscriptResolver = function handleResolved() {
+            clearTimeout(timeoutTimer);
+            finish();
+          };
+        });
+
+        if (activeSocket.readyState === WebSocket.OPEN) {
+          activeSocket.close();
+        }
+      } else if (socket) {
+        socket.close();
+      }
+      socket = null;
+    },
+  };
 }
