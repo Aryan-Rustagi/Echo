@@ -1,0 +1,14 @@
+{
+  "name": "echo-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd Backend && npx nodemon server.js",
+    "dev:frontend": "cd Frontend/Echo && npm run dev",
+    "install:all": "npm install && cd Backend && npm install && cd ../Frontend/Echo && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

@@ -153,7 +153,7 @@ Secondary user: The developer building and testing the pipeline.
 | Layer | Selection | Rationale |
 | :--- | :--- | :--- |
 | Frontend | React + Vite + TypeScript | Fast dev loop; typed state machine |
-| Styling | Tailwind CSS | Minimal setup |
+| Styling | Plain CSS | Single App.css file, zero dependencies |
 | Backend | Node.js + Express | Thin credential proxy |
 | STT | Groq Whisper whisper-large-v3-turbo | Free, reliable, same vendor as LLM |
 | LLM | Groq llama-3.3-70b-versatile | Free tier, OpenAI-compatible |
