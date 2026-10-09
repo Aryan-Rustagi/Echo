@@ -11,6 +11,8 @@ import {
   resumeAudioContext,
   setOnFirstAudio,
   waitForQueueDrain,
+  setTtsProvider,
+  type TtsProvider,
 } from "./pipeline/tts";
 
 type Status = "idle" | "recording" | "transcribing" | "thinking" | "speaking" | "error";
@@ -24,6 +26,7 @@ export default function LandingPage() {
   const [status, setStatus] = useState<Status>("idle");
   const [engine, setEngine] = useState<Engine>("speechmatics");
   const [llmProvider, setLlmProvider] = useState<LlmProvider>("gemini");
+  const [ttsProvider, setTtsProviderState] = useState<TtsProvider>("browser");
   const [continuousMode, setContinuousMode] = useState<boolean>(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [transcript, setTranscript] = useState("");
@@ -385,10 +388,16 @@ export default function LandingPage() {
     llmProviderRef.current = chosen;
   }
 
+  function handleTtsProviderChange(e: React.ChangeEvent<HTMLSelectElement>): void {
+    const chosen = e.target.value as TtsProvider;
+    setTtsProviderState(chosen);
+    setTtsProvider(chosen);
+  }
+
   return (
     <div className="container">
       <h1>ECHO</h1>
-      <p className="subtitle">Voice pipeline — Phase 1</p>
+      <p className="subtitle">A simple voice assistant</p>
 
       <div className="actions">
         <select
@@ -401,6 +410,19 @@ export default function LandingPage() {
         >
           <option value="speechmatics">Speechmatics</option>
           <option value="deepgram">Deepgram</option>
+        </select>
+
+        <select
+          className="engine-select"
+          value={ttsProvider}
+          onChange={handleTtsProviderChange}
+          disabled={status !== "idle" && status !== "error"}
+          aria-label="Select text to speech provider"
+          title="Text to Speech Provider"
+        >
+          <option value="browser">Browser voice</option>
+          <option value="elevenlabs">ElevenLabs</option>
+          <option value="piper">Piper (local)</option>
         </select>
 
         <select
