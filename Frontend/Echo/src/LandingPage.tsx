@@ -1,41 +1,57 @@
-import { useState } from 'react';
-import { startRecording, stopRecording } from './pipeline/recorder';
-import { transcribe } from './pipeline/stt';
+import { useState, useRef } from 'react';
+import { startRealtimeTranscription, stopRealtimeTranscription } from './pipeline/deepgram';
+import { startSpeechmaticsTranscription, stopSpeechmaticsTranscription } from './pipeline/speechmatics';
 
 type Status = 'idle' | 'recording' | 'transcribing' | 'thinking' | 'speaking' | 'error';
+type Engine = 'deepgram' | 'speechmatics';
 
 export default function LandingPage() {
   const [status, setStatus] = useState<Status>('idle');
+  const [engine, setEngine] = useState<Engine>('deepgram');
   const [transcript, setTranscript] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  const finalizedTextRef = useRef('');
+  const DEEPGRAM_API_KEY = "0e1835b889092a42aa9f25af413443e6e3bd7edd";
+  const SPEECHMATICS_API_KEY = "7C5SeYxN6hQLTFtSyvTqO2HaJryEAuKr";
 
   const handleToggle = async () => {
     if (status === 'idle' || status === 'error') {
       try {
         setErrorMsg('');
         setTranscript('');
-        await startRecording();
+        finalizedTextRef.current = '';
         setStatus('recording');
+
+        const onTranscript = (text: string, isFinal: boolean) => {
+          if (isFinal) {
+            finalizedTextRef.current += (finalizedTextRef.current ? ' ' : '') + text;
+            setTranscript(finalizedTextRef.current);
+          } else {
+            setTranscript(finalizedTextRef.current + (finalizedTextRef.current ? ' ' : '') + text);
+          }
+        };
+
+        const onError = (err: Error) => {
+           setStatus('error');
+           setErrorMsg(err.message || `${engine} access error.`);
+           if (engine === 'deepgram') stopRealtimeTranscription();
+           else stopSpeechmaticsTranscription();
+        };
+
+        if (engine === 'deepgram') {
+          await startRealtimeTranscription(DEEPGRAM_API_KEY, onTranscript, onError);
+        } else {
+          await startSpeechmaticsTranscription(SPEECHMATICS_API_KEY, onTranscript, onError);
+        }
       } catch (err: any) {
         setStatus('error');
         setErrorMsg(err.message || 'Microphone access required.');
       }
     } else if (status === 'recording') {
-      try {
-        setStatus('transcribing');
-        const audioBlob = await stopRecording();
-        const text = await transcribe(audioBlob);
-        
-        if (!text) {
-          throw new Error("No speech detected. Try again.");
-        }
-        
-        setTranscript(text);
-        setStatus('idle'); // Next phases will transition to 'thinking' here
-      } catch (err: any) {
-        setStatus('error');
-        setErrorMsg(err.message || 'Transcription failed. Try again.');
-      }
+      if (engine === 'deepgram') stopRealtimeTranscription();
+      else stopSpeechmaticsTranscription();
+      setStatus('idle');
     }
   };
 
@@ -45,6 +61,10 @@ export default function LandingPage() {
       <p className="subtitle">Voice pipeline — Phase 1</p>
       
       <div className="actions">
+        <select value={engine} onChange={(e) => setEngine(e.target.value as Engine)} disabled={status !== 'idle' && status !== 'error'} style={{ marginRight: '10px', padding: '4px 8px' }}>
+          <option value="deepgram">Deepgram</option>
+          <option value="speechmatics">Speechmatics</option>
+        </select>
         <button 
           type="button" 
           onClick={handleToggle}

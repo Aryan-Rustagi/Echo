@@ -41,7 +41,8 @@ Echo is not production-grade, not commercially viable, and not intended to outpe
 **In Scope**
 * Web page with mic control and transcript display
 * Audio capture via MediaRecorder
-* STT via Groq Whisper
+* Real-time STT via Deepgram and Speechmatics (WebSocket Streaming)
+* STT fallback via Groq Whisper (REST)
 * LLM response via Groq
 * TTS via Edge TTS (fallback: browser SpeechSynthesis)
 * Local Express proxy to secure credentials
@@ -50,7 +51,6 @@ Echo is not production-grade, not commercially viable, and not intended to outpe
 * Repository documentation and PR
 
 **Out of Scope (Phase 2 candidates)**
-* Streaming audio
 * VAD
 * turn detection
 * conversation memory
@@ -155,7 +155,7 @@ Secondary user: The developer building and testing the pipeline.
 | Frontend | React + Vite + TypeScript | Fast dev loop; typed state machine |
 | Styling | Plain CSS | Single App.css file, zero dependencies |
 | Backend | Node.js + Express | Thin credential proxy |
-| STT | Groq Whisper whisper-large-v3-turbo | Free, reliable, same vendor as LLM |
+| STT | Deepgram (RT) / Speechmatics (RT) / Groq Whisper (REST) | WebSocket streaming added for real-time comparison |
 | LLM | Groq llama-3.3-70b-versatile | Free tier, OpenAI-compatible |
 | TTS | Edge TTS (fallback: SpeechSynthesis) | Free, neural voices, no key |
 
