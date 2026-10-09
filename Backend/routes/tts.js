@@ -1,9 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-// TTS endpoint using browser-compatible approach.
-// Edge TTS requires a WebSocket connection to Microsoft's service.
-// We use the free edge-tts approach: generate speech server-side and return audio.
+// TTS endpoint
 router.post('/', async (req, res) => {
   try {
     const { text } = req.body;
@@ -11,7 +9,43 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: "No text provided" });
     }
 
-    // Use Microsoft Edge TTS via their free API endpoint
+    // Attempt to use ElevenLabs if the API key is configured
+    if (process.env.ELEVENLABS_API_KEY) {
+      try {
+        const voiceId = "pNInz6obpgDQGcFmaJgB"; // Adam voice
+        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
+          method: "POST",
+          headers: {
+            "xi-api-key": process.env.ELEVENLABS_API_KEY,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            text: text,
+            model_id: "eleven_monolingual_v1",
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.5
+            }
+          })
+        });
+
+        if (response.ok) {
+          const arrayBuffer = await response.arrayBuffer();
+          const buffer = Buffer.from(arrayBuffer);
+          res.set({
+            'Content-Type': 'audio/mpeg',
+            'Content-Length': buffer.length,
+          });
+          return res.send(buffer);
+        } else {
+          console.warn("ElevenLabs API failed, falling back to Edge TTS.", await response.text());
+        }
+      } catch (err) {
+        console.warn("Error calling ElevenLabs, falling back to Edge TTS:", err.message);
+      }
+    }
+
+    // Fallback: Use Microsoft Edge TTS via their free API endpoint
     const voice = "en-US-AriaNeural";
     const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>
       <voice name='${voice}'>${escapeXml(text)}</voice>
