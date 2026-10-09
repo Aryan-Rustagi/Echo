@@ -10,18 +10,22 @@ router.post('/', async (req, res) => {
     }
 
     // Attempt to use ElevenLabs if the API key is configured
-    if (process.env.ELEVENLABS_API_KEY) {
+    const rawKey = process.env.ELEVENLABS_API_KEY;
+    if (rawKey) {
+      const apiKey = rawKey.trim();
       try {
-        const voiceId = "pNInz6obpgDQGcFmaJgB"; // Adam voice
+        const voiceId = "21m00Tcm4TlvDq8ikWAM"; // Rachel voice
+        console.log(`[TTS] Generating speech with ElevenLabs (Voice: Rachel, Key: ${apiKey.slice(0, 8)}...) for text: "${text.slice(0, 40)}"`);
+
         const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
           method: "POST",
           headers: {
-            "xi-api-key": process.env.ELEVENLABS_API_KEY,
+            "xi-api-key": apiKey,
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
             text: text,
-            model_id: "eleven_monolingual_v1",
+            model_id: "eleven_multilingual_v2",
             voice_settings: {
               stability: 0.5,
               similarity_boost: 0.5
@@ -32,17 +36,23 @@ router.post('/', async (req, res) => {
         if (response.ok) {
           const arrayBuffer = await response.arrayBuffer();
           const buffer = Buffer.from(arrayBuffer);
+          console.log(`[TTS] ElevenLabs SUCCESS! Returning MP3 buffer (${buffer.length} bytes)`);
           res.set({
             'Content-Type': 'audio/mpeg',
             'Content-Length': buffer.length,
           });
           return res.send(buffer);
         } else {
-          console.warn("ElevenLabs API failed, falling back to Edge TTS.", await response.text());
+          const errorText = await response.text();
+          console.error(`[TTS] ElevenLabs FAILED (Status ${response.status}):`, errorText);
+          return res.status(500).json({ error: "ElevenLabs API Error: " + errorText });
         }
       } catch (err) {
-        console.warn("Error calling ElevenLabs, falling back to Edge TTS:", err.message);
+        console.error("[TTS] Network/Execution error calling ElevenLabs:", err.message);
+        return res.status(500).json({ error: "Failed to connect to ElevenLabs: " + err.message });
       }
+    } else {
+      console.warn("[TTS] ELEVENLABS_API_KEY not found in process.env!");
     }
 
     // Fallback: Use Microsoft Edge TTS via their free API endpoint
