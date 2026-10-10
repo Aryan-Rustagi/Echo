@@ -1,3 +1,5 @@
+import { API_BASE } from "../config";
+
 interface QueueItem {
   id: number;
   text: string;
@@ -16,7 +18,6 @@ let onFirstAudioCallback: (() => void) | null = null;
 let firstAudioFired = false;
 let queueDrainResolvers: (() => void)[] = [];
 let selectedProvider: TtsProvider = "browser";
-const apiBase = (import.meta.env.VITE_API_BASE as string | undefined) || "http://localhost:3000";
 
 export function setTtsProvider(provider: TtsProvider): void {
   selectedProvider = provider;
@@ -136,7 +137,7 @@ export function speakWithBrowserTTS(text: string): Promise<void> {
 }
 
 async function synthesizeRemote(text: string, provider: TtsProvider, signal: AbortSignal): Promise<AudioBuffer> {
-  const response = await fetch(`${apiBase}/api/tts`, {
+  const response = await fetch(`${API_BASE}/api/tts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, provider }),
