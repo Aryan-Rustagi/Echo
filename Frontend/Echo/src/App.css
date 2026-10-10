@@ -2,6 +2,7 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
   color: #0f172a;
   background-color: #f8fafc;
+  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -143,12 +144,18 @@ input:focus-visible {
   min-height: 38px;
   padding: 0 10px;
   border: none;
-  background: transparent;
+  background-color: transparent;
   color: #0f172a;
+  color-scheme: light;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   outline: none;
+}
+
+.engine-select option {
+  background-color: #ffffff;
+  color: #0f172a;
 }
 
 .engine-select:disabled {
@@ -515,29 +522,145 @@ input:focus-visible {
   font-style: italic;
 }
 
-/* Mobile Responsiveness */
+/* Tablet & Mobile Responsiveness */
+@media (max-width: 840px) {
+  .container {
+    width: min(100% - 32px, 800px);
+    padding: 28px 0 56px;
+  }
+
+  .actions-selectors {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .select-group {
+    min-height: 42px;
+  }
+
+  .select-label {
+    min-height: 42px;
+  }
+
+  .engine-select {
+    min-height: 42px;
+    font-size: 13.5px;
+  }
+
+  .btn {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+}
+
 @media (max-width: 640px) {
   .container {
-    width: min(100% - 24px, 800px);
-    padding: 24px 0 48px;
+    width: min(100% - 20px, 800px);
+    padding: 16px 0 max(48px, env(safe-area-inset-bottom));
   }
 
   .header-bar {
     flex-direction: column;
     align-items: stretch;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .main-title {
+    font-size: 26px;
+  }
+
+  .subtitle {
+    font-size: 13px;
+  }
+
+  .nav-btn {
+    width: 100%;
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+  }
+
+  .actions {
+    padding: 14px 14px;
+    gap: 12px;
+    border-radius: 10px;
   }
 
   .actions-selectors {
     grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .select-group {
+    min-height: 44px;
+  }
+
+  .select-label {
+    min-height: 44px;
+    font-size: 11.5px;
+  }
+
+  .engine-select {
+    min-height: 44px;
+    font-size: 14px;
   }
 
   .actions-controls {
     flex-direction: column;
     align-items: stretch;
+    gap: 10px;
+    padding-top: 10px;
+  }
+
+  .btn-start,
+  .btn-recording {
+    width: 100%;
+    min-height: 48px;
+    font-size: 15px;
+    touch-action: manipulation;
+  }
+
+  .btn-secondary {
+    width: 100%;
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  .toggle-label {
+    width: 100%;
+    min-height: 40px;
+    justify-content: flex-start;
+    padding: 2px 4px;
   }
 
   .status-container {
     margin-left: 0;
+    width: 100%;
+  }
+
+  .status-pill {
+    width: 100%;
+    justify-content: center;
+    min-height: 36px;
+  }
+
+  .blocks {
+    max-height: min(440px, 50vh);
+    min-height: 220px;
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .text-box {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  .btn:active {
+    transform: scale(0.98);
   }
 }
 
@@ -547,6 +670,7 @@ input:focus-visible {
   body {
     background-color: #0b0f14;
     color: #f1f5f9;
+    color-scheme: dark;
   }
 
   .brand-tag {
@@ -598,6 +722,13 @@ input:focus-visible {
   }
 
   .engine-select {
+    color: #f1f5f9;
+    color-scheme: dark;
+    background-color: #17202a;
+  }
+
+  .engine-select option {
+    background-color: #17202a;
     color: #f1f5f9;
   }
 
