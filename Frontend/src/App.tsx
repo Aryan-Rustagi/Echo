@@ -9,6 +9,7 @@ const HISTORY_LIMIT = 8;
 
 export default function App() {
   const [state, setState] = useState<"idle" | "recording" | "transcribing" | "thinking" | "speaking">("idle");
+  const [ttsProvider, setTtsProvider] = useState<"piper" | "elevenlabs">("piper");
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string>("");
 
@@ -54,7 +55,7 @@ export default function App() {
         const reply = await getResponse(recent);
         setMessages([...updated, { role: "assistant", content: reply }]);
         setState("speaking");
-        await speak(reply);
+        await speak(reply, ttsProvider);
         setState("idle");
       } catch (err: any) {
         setError(err.message || "An error occurred");
@@ -71,6 +72,14 @@ export default function App() {
       <div className="status">{state}</div>
 
       <div>
+        <select
+          value={ttsProvider}
+          onChange={(e) => setTtsProvider(e.target.value as "piper" | "elevenlabs")}
+          disabled={state !== "idle"}
+        >
+          <option value="piper">Piper (Local)</option>
+          <option value="elevenlabs">ElevenLabs</option>
+        </select>
         <button
           className="mic-button"
           onClick={handleClick}

@@ -1,159 +1,138 @@
-const express = require('express');
+import express from "express";
+import { spawn } from "child_process";
+import fs from "fs";
+import path from "path";
+import os from "os";
+import { fileURLToPath } from "url";
+import { ElevenLabsClient } from "elevenlabs";
+
 const router = express.Router();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const modelPath = path.resolve(__dirname, "../voices/en_US-lessac-medium.onnx");
 
-// TTS endpoint
-router.post('/', async (req, res) => {
-  try {
-    const { text } = req.body;
-    if (typeof text !== 'string' || text.trim() === '') {
-      return res.status(400).json({ error: "No text provided" });
-    }
+function synthesizeWithPiper(text) {
+  return new Promise(function (resolve, reject) {
+    const tempWav = path.join(
+      os.tmpdir(),
+      `piper_${Date.now()}_${Math.random().toString(36).slice(2)}.wav`
+    );
 
-    // Attempt to use ElevenLabs if the API key is configured
-    const rawKey = process.env.ELEVENLABS_API_KEY;
-    if (rawKey) {
-      const apiKey = rawKey.trim();
-      try {
-        const voiceId = "21m00Tcm4TlvDq8ikWAM"; // Rachel voice
-        console.log(`[TTS] Generating speech with ElevenLabs (Voice: Rachel, Key: ${apiKey.slice(0, 8)}...) for text: "${text.slice(0, 40)}"`);
+    const piper = spawn("piper", [
+      "--model",
+      modelPath,
+      "--output_file",
+      tempWav,
+    ]);
 
-        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
-          method: "POST",
-          headers: {
-            "xi-api-key": apiKey,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            text: text,
-            model_id: "eleven_multilingual_v2",
-            voice_settings: {
-              stability: 0.5,
-              similarity_boost: 0.5
-            }
-          })
-        });
+    let settled = false;
 
-        if (response.ok) {
-          const arrayBuffer = await response.arrayBuffer();
-          const buffer = Buffer.from(arrayBuffer);
-          console.log(`[TTS] ElevenLabs SUCCESS! Returning MP3 buffer (${buffer.length} bytes)`);
-          res.set({
-            'Content-Type': 'audio/mpeg',
-            'Content-Length': buffer.length,
-          });
-          return res.send(buffer);
-        } else {
-          const errorText = await response.text();
-          console.warn(`[TTS] ElevenLabs FAILED (Status ${response.status}): ${errorText}. Falling back to Edge TTS...`);
+    const timer = setTimeout(function () {
+      if (!settled) {
+        settled = true;
+        piper.kill();
+        if (fs.existsSync(tempWav)) {
+          try {
+            fs.unlinkSync(tempWav);
+          } catch (_e) {}
         }
-      } catch (err) {
-        console.warn("[TTS] Error calling ElevenLabs:", err.message, ". Falling back to Edge TTS...");
+        reject(new Error("Piper synthesis timed out"));
       }
-    } else {
-      console.warn("[TTS] ELEVENLABS_API_KEY not found in process.env!");
-    }
+    }, 15000);
 
-    // Fallback: Use Microsoft Edge TTS via their free API endpoint
-    const voice = "en-US-AriaNeural";
-    const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='en-US'>
-      <voice name='${voice}'>${escapeXml(text)}</voice>
-    </speak>`;
-
-    // Edge TTS WebSocket approach - connect to the free endpoint
-    const WebSocket = require('ws');
-    const wsUrl = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4&ConnectionId=${generateUUID()}`;
-    
-    const audioChunks = [];
-    
-    await new Promise((resolve, reject) => {
-      const ws = new WebSocket(wsUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "Origin": "chrome-extension://jdiccldimpdaibmpdmdrat",
+    piper.on("error", function (err) {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        if (fs.existsSync(tempWav)) {
+          try {
+            fs.unlinkSync(tempWav);
+          } catch (_e) {}
         }
-      });
+        reject(err);
+      }
+    });
 
-      const timeout = setTimeout(() => {
-        ws.close();
-        reject(new Error("Edge TTS timed out"));
-      }, 15000);
-
-      ws.on('open', () => {
-        // Send config message
-        ws.send(`Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-96kbitrate-mono-mp3"}}}}`);
-        
-        // Send SSML message
-        const requestId = generateUUID();
-        ws.send(`X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`);
-      });
-
-      ws.on('message', (data, isBinary) => {
-        if (isBinary) {
-          // Binary messages contain the audio data
-          // The binary data starts after the header, which ends with "\r\n\r\n"
-          const headerEnd = findHeaderEnd(data);
-          if (headerEnd !== -1) {
-            audioChunks.push(data.slice(headerEnd));
+    piper.on("close", function (code) {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        if (code === 0) {
+          try {
+            const buffer = fs.readFileSync(tempWav);
+            fs.unlinkSync(tempWav);
+            resolve(buffer);
+          } catch (readErr) {
+            reject(readErr);
           }
         } else {
-          const message = data.toString();
-          if (message.includes("Path:turn.end")) {
-            clearTimeout(timeout);
-            ws.close();
-            resolve();
+          if (fs.existsSync(tempWav)) {
+            try {
+              fs.unlinkSync(tempWav);
+            } catch (_e) {}
           }
+          reject(new Error(`Piper exited with code ${code}`));
         }
-      });
-
-      ws.on('error', (err) => {
-        clearTimeout(timeout);
-        reject(err);
-      });
-
-      ws.on('close', () => {
-        clearTimeout(timeout);
-        resolve();
-      });
+      }
     });
 
-    if (audioChunks.length === 0) {
-      // Fallback: return empty response, frontend will use SpeechSynthesis
-      return res.status(204).send();
+    piper.stdin.write(text);
+    piper.stdin.end();
+  });
+}
+
+async function synthesizeWithElevenLabs(text) {
+  const client = new ElevenLabsClient({
+    apiKey: process.env.ELEVENLABS_API_KEY,
+  });
+
+  const audioStream = await client.textToSpeech.convert("JBFqnCBsd6RMkjVDRZzb", {
+    text: text,
+    modelId: "eleven_flash_v2_5",
+  });
+
+  const chunks = [];
+  for await (const chunk of audioStream) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+router.post("/", async function (req, res) {
+  const text = req.body && req.body.text;
+  if (!text || typeof text !== "string" || text.trim() === "") {
+    return res.status(400).json({ error: "No text provided" });
+  }
+
+  const provider = req.body && req.body.provider;
+
+  if (provider === "elevenlabs") {
+    try {
+      const buffer = await synthesizeWithElevenLabs(text);
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("X-TTS-Provider", "elevenlabs");
+      return res.send(buffer);
+    } catch (_err) {
+      return res.status(500).json({ error: "Speech synthesis failed" });
     }
+  }
 
-    const audioBuffer = Buffer.concat(audioChunks);
-    res.set({
-      'Content-Type': 'audio/mpeg',
-      'Content-Length': audioBuffer.length,
-    });
-    res.send(audioBuffer);
-
-  } catch (error) {
-    console.error("TTS Error:", error.message);
-    // Return 204 to signal fallback to browser SpeechSynthesis
-    res.status(204).send();
+  try {
+    const buffer = await synthesizeWithPiper(text);
+    res.setHeader("Content-Type", "audio/wav");
+    res.setHeader("X-TTS-Provider", "piper");
+    return res.send(buffer);
+  } catch (piperErr) {
+    console.error("[TTS] Piper failed:", piperErr);
+    try {
+      const buffer = await synthesizeWithElevenLabs(text);
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("X-TTS-Provider", "elevenlabs");
+      return res.send(buffer);
+    } catch (_elevenErr) {
+      return res.status(500).json({ error: "Speech synthesis failed" });
+    }
   }
 });
 
-function escapeXml(text) {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function generateUUID() {
-  return 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.replace(/x/g, () =>
-    Math.floor(Math.random() * 16).toString(16)
-  );
-}
-
-function findHeaderEnd(buffer) {
-  const separator = Buffer.from('\r\n\r\n');
-  const idx = buffer.indexOf(separator);
-  return idx !== -1 ? idx + separator.length : -1;
-}
-
-module.exports = router;
+export default router;

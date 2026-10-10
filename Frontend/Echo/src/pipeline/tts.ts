@@ -5,6 +5,8 @@ interface QueueItem {
   audioPromise: Promise<AudioBuffer | null>;
 }
 
+export type TtsProvider = "browser" | "elevenlabs" | "piper";
+
 let audioContext: AudioContext | null = null;
 let queue: QueueItem[] = [];
 let isPlaying = false;
@@ -13,6 +15,12 @@ let nextItemId = 1;
 let onFirstAudioCallback: (() => void) | null = null;
 let firstAudioFired = false;
 let queueDrainResolvers: (() => void)[] = [];
+let selectedProvider: TtsProvider = "browser";
+const apiBase = (import.meta.env.VITE_API_BASE as string | undefined) || "http://localhost:3000";
+
+export function setTtsProvider(provider: TtsProvider): void {
+  selectedProvider = provider;
+}
 
 export function getAudioContext(): AudioContext {
   if (!audioContext) {
@@ -127,6 +135,31 @@ export function speakWithBrowserTTS(text: string): Promise<void> {
   });
 }
 
+async function synthesizeRemote(text: string, provider: TtsProvider, signal: AbortSignal): Promise<AudioBuffer> {
+  const response = await fetch(`${apiBase}/api/tts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, provider }),
+    signal,
+  });
+
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const payload = (await response.json()) as { error?: string };
+      if (payload.error) {
+        detail = payload.error;
+      }
+    } catch (_error) {
+      // Keep the HTTP status when the server does not return JSON.
+    }
+    throw new Error(`TTS provider failed: ${detail}`);
+  }
+
+  const bytes = await response.arrayBuffer();
+  return getAudioContext().decodeAudioData(bytes);
+}
+
 async function processQueue(): Promise<void> {
   if (isPlaying) {
     return;
@@ -148,8 +181,12 @@ async function processQueue(): Promise<void> {
     return;
   }
 
-  // Browser speech starts immediately; remote TTS must not block the queue.
-  const audioBuffer = await item.audioPromise;
+  let audioBuffer: AudioBuffer | null = null;
+  try {
+    audioBuffer = await item.audioPromise;
+  } catch (error) {
+    console.warn(`[TTS] ${selectedProvider} failed; using browser speech instead.`, error);
+  }
 
   // Signal first audio start for timing and UI state
   if (!firstAudioFired) {
@@ -205,7 +242,10 @@ export function enqueueSentence(text: string, turnSignal?: AbortSignal): void {
     id: nextItemId += 1,
     text: trimmed,
     abortController: abortController,
-    audioPromise: Promise.resolve(null),
+    audioPromise:
+      selectedProvider === "browser"
+        ? Promise.resolve(null)
+        : synthesizeRemote(trimmed, selectedProvider, abortController.signal),
   };
 
   queue.push(item);
