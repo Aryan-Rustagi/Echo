@@ -108,13 +108,21 @@ export async function startRealtimeTranscription(
     }
   };
 
+  let errorReported = false;
+  function reportError(err: Error) {
+    if (!errorReported && !isStopped) {
+      errorReported = true;
+      onError(err);
+    }
+  }
+
   socket.onerror = function handleError(error: Event) {
     console.error("Deepgram WebSocket Error", error);
     void cleanup();
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.close();
     }
-    onError(new Error("Deepgram connection failed. Please check the API key."));
+    reportError(new Error("Deepgram connection failed. Please check the API key."));
   };
 
   socket.onclose = function handleClose() {
@@ -139,7 +147,7 @@ export async function startRealtimeTranscription(
       });
     } catch (micErr: unknown) {
       const errorObj = micErr instanceof Error ? micErr : new Error(String(micErr));
-      onError(errorObj);
+      reportError(errorObj);
     }
   };
 

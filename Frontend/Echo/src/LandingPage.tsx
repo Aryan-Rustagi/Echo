@@ -22,7 +22,11 @@ interface FinishTurnFn {
   (): Promise<void>;
 }
 
-export default function LandingPage() {
+export interface LandingPageProps {
+  onNavigateToCover?: () => void;
+}
+
+export default function LandingPage({ onNavigateToCover }: LandingPageProps = {}) {
   const [status, setStatus] = useState<Status>("idle");
   const [engine, setEngine] = useState<Engine>("speechmatics");
   const [llmProvider, setLlmProvider] = useState<LlmProvider>("gemini");
@@ -113,6 +117,7 @@ export default function LandingPage() {
     console.warn("Realtime engine failed, activating Whisper fallback:", reason);
     setFallbackNotice(`Realtime engine failed (${reason}). Switched to Whisper fallback.`);
     isFallbackRef.current = true;
+    turnActiveRef.current = true;
 
     if (transcriptionControllerRef.current) {
       const controller = transcriptionControllerRef.current;
@@ -126,6 +131,7 @@ export default function LandingPage() {
 
     try {
       await startRecording();
+      turnActiveRef.current = true;
       updateStatus("recording");
     } catch (recErr: unknown) {
       turnActiveRef.current = false;
@@ -137,8 +143,8 @@ export default function LandingPage() {
   }
 
   async function finishTurn(): Promise<void> {
-    // Guard against double finishTurn
-    if (!turnActiveRef.current) {
+    // Guard against duplicate execution
+    if (statusRef.current !== "recording" && !turnActiveRef.current) {
       return;
     }
     turnActiveRef.current = false;
@@ -189,7 +195,7 @@ export default function LandingPage() {
     const currentText = finalizedTextRef.current.trim();
     if (!currentText) {
       setErrorMsg("No speech detected. Try again.");
-      updateStatus("error");
+      updateStatus("idle");
       return;
     }
 
@@ -358,17 +364,26 @@ export default function LandingPage() {
   }
 
   async function handleToggle(): Promise<void> {
-    if (status === "idle" || status === "error") {
-      await startTurn();
-    } else if (status === "recording") {
+    const currentStatus = statusRef.current;
+
+    if (currentStatus === "recording") {
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
         silenceTimerRef.current = null;
       }
       speechEndTimestampRef.current = performance.now();
-      if (finishTurnRef.current) {
-        await finishTurnRef.current();
+      turnActiveRef.current = true;
+      await finishTurn();
+    } else if (currentStatus === "speaking" || currentStatus === "thinking") {
+      stopAll();
+      if (turnAbortControllerRef.current) {
+        turnAbortControllerRef.current.abort();
+        turnAbortControllerRef.current = null;
       }
+      turnActiveRef.current = false;
+      updateStatus("idle");
+    } else {
+      await startTurn();
     }
   }
 
@@ -396,84 +411,127 @@ export default function LandingPage() {
 
   return (
     <div className="container">
-      <h1>ECHO</h1>
-      <p className="subtitle">A simple voice assistant</p>
+      <div className="header-bar">
+        <div>
+          <div className="brand-tag">VOICE AI PIPELINE</div>
+          <h1 className="main-title">ECHO</h1>
+          <p className="subtitle">Real-time modular conversational assistant</p>
+        </div>
+        {onNavigateToCover && (
+          <button
+            type="button"
+            className="nav-btn"
+            onClick={onNavigateToCover}
+            aria-label="View architecture overview"
+          >
+            Architecture Overview →
+          </button>
+        )}
+      </div>
 
       <div className="actions">
-        <select
-          className="engine-select"
-          value={engine}
-          onChange={handleEngineChange}
-          disabled={status !== "idle" && status !== "error"}
-          aria-label="Select STT engine"
-          title="Speech-to-Text Engine"
-        >
-          <option value="speechmatics">Speechmatics</option>
-          <option value="deepgram">Deepgram</option>
-        </select>
+        <div className="actions-selectors">
+          <div className="select-group">
+            <span className="select-label">STT</span>
+            <select
+              className="engine-select"
+              value={engine}
+              onChange={handleEngineChange}
+              disabled={status !== "idle" && status !== "error"}
+              aria-label="Select STT engine"
+              title="Speech-to-Text Engine"
+            >
+              <option value="speechmatics">Speechmatics (Realtime)</option>
+              <option value="deepgram">Deepgram (Realtime)</option>
+            </select>
+          </div>
 
-        <select
-          className="engine-select"
-          value={ttsProvider}
-          onChange={handleTtsProviderChange}
-          disabled={status !== "idle" && status !== "error"}
-          aria-label="Select text to speech provider"
-          title="Text to Speech Provider"
-        >
-          <option value="browser">Browser voice</option>
-          <option value="elevenlabs">ElevenLabs</option>
-          <option value="piper">Piper (local)</option>
-        </select>
+          <div className="select-group">
+            <span className="select-label">TTS</span>
+            <select
+              className="engine-select"
+              value={ttsProvider}
+              onChange={handleTtsProviderChange}
+              disabled={status !== "idle" && status !== "error"}
+              aria-label="Select text to speech provider"
+              title="Text to Speech Provider"
+            >
+              <option value="elevenlabs">ElevenLabs Flash</option>
+              <option value="browser">Browser Voice</option>
+              <option value="piper">Piper (Local)</option>
+            </select>
+          </div>
 
-        <select
-          className="engine-select"
-          value={llmProvider}
-          onChange={handleLlmProviderChange}
-          disabled={status !== "idle" && status !== "error"}
-          aria-label="Select LLM model"
-          title="LLM Model"
-        >
-          <option value="gemini">Gemini Flash</option>
-          <option value="openai">OpenAI (GPT-4o-mini)</option>
-        </select>
+          <div className="select-group">
+            <span className="select-label">LLM</span>
+            <select
+              className="engine-select"
+              value={llmProvider}
+              onChange={handleLlmProviderChange}
+              disabled={status !== "idle" && status !== "error"}
+              aria-label="Select LLM model"
+              title="LLM Model"
+            >
+              <option value="gemini">Gemini Flash</option>
+              <option value="openai">OpenAI (GPT-4o-mini)</option>
+            </select>
+          </div>
+        </div>
 
-        <button
-          className="btn"
-          type="button"
-          onClick={handleToggle}
-          disabled={status === "transcribing" || status === "thinking"}
-        >
-          {status === "recording" ? "Stop" : "Start"}
-        </button>
+        <div className="actions-controls">
+          <button
+            className={`btn btn-toggle ${status === "recording" ? "btn-recording" : "btn-start"}`}
+            type="button"
+            onClick={handleToggle}
+            disabled={status === "transcribing" || status === "thinking"}
+          >
+            {status === "recording" ? (
+              <>
+                <span className="btn-icon">⏹</span> Stop Recording
+              </>
+            ) : status === "speaking" ? (
+              <>
+                <span className="btn-icon">⏹</span> Stop Speaking
+              </>
+            ) : (
+              <>
+                <span className="btn-icon">●</span> Start Speaking
+              </>
+            )}
+          </button>
 
-        <button
-          className="btn"
-          type="button"
-          onClick={handleNewSession}
-          disabled={status === "recording" || status === "thinking"}
-        >
-          New session
-        </button>
+          <button
+            className="btn btn-secondary"
+            type="button"
+            onClick={handleNewSession}
+            disabled={status === "recording" || status === "thinking"}
+          >
+            New Session
+          </button>
 
-        <label className="toggle-label">
-          <input
-            className="toggle-checkbox"
-            type="checkbox"
-            checked={continuousMode}
-            onChange={handleContinuousChange}
-          />
-          Continuous mode
-        </label>
+          <label className="toggle-label">
+            <input
+              className="toggle-checkbox"
+              type="checkbox"
+              checked={continuousMode}
+              onChange={handleContinuousChange}
+            />
+            Continuous mode
+          </label>
 
-        <span className="status-badge" aria-live="polite">
-          Status: {status}
-        </span>
+          <div className="status-container">
+            <span className={`status-pill status-${status}`} aria-live="polite">
+              <span className="status-dot"></span>
+              {status}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="status-bar">
         {status === "recording" && (
           <span className="mic-live-indicator" aria-live="polite">
-            ● Mic is live (listening...)
+            <span className="live-dot"></span> Listening for speech...
           </span>
         )}
 
@@ -499,7 +557,9 @@ export default function LandingPage() {
       <div className="blocks" ref={logRef}>
         {messages.length === 0 && !transcript && !response && (
           <div className="empty-notice">
-            No messages yet. Click Start to speak.
+            <div className="empty-icon">🎙️</div>
+            <div className="empty-title">Ready to converse</div>
+            <div className="empty-desc">Click <strong>Start Speaking</strong> or spacebar to speak. Echo will transcribe, generate, and answer out loud.</div>
           </div>
         )}
 
@@ -509,8 +569,10 @@ export default function LandingPage() {
               key={idx}
               className={`block ${m.role === "user" ? "block-user" : "block-assistant"}`}
             >
-              <div className="label">
-                {m.role === "user" ? "You said" : "Echo said"}
+              <div className="block-meta">
+                <span className="label">
+                  {m.role === "user" ? "YOU" : "ECHO"}
+                </span>
               </div>
               <div className="text-box">
                 {m.content}
@@ -521,8 +583,10 @@ export default function LandingPage() {
 
         {status === "recording" && transcript && (
           <div className="block block-user live-block">
-            <div className="label">
-              You said (speaking...)
+            <div className="block-meta">
+              <span className="label">
+                YOU (SPEAKING...)
+              </span>
             </div>
             <div className="text-box">
               {transcript}
@@ -532,8 +596,10 @@ export default function LandingPage() {
 
         {(status === "thinking" || status === "speaking") && response && (
           <div className="block block-assistant streaming-block">
-            <div className="label">
-              Echo said {status === "speaking" ? "(speaking...)" : "(generating...)"}
+            <div className="block-meta">
+              <span className="label">
+                ECHO {status === "speaking" ? "(SPEAKING...)" : "(STREAMING...)"}
+              </span>
             </div>
             <div className="text-box">
               {response}
@@ -543,8 +609,10 @@ export default function LandingPage() {
 
         {status === "thinking" && !response && (
           <div className="block block-assistant thinking-block">
-            <div className="label">
-              Echo said
+            <div className="block-meta">
+              <span className="label">
+                ECHO
+              </span>
             </div>
             <div className="text-box thinking-text">
               Thinking...

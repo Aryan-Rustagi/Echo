@@ -1,0 +1,193 @@
+.cover-page {
+  max-width: 740px;
+  margin: 0 auto;
+  padding: 48px 32px 64px;
+  background-color: #ffffff;
+  color: #0f172a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.cover-page h1 {
+  font-size: 32px;
+  margin: 0 0 6px 0;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  color: #0f172a;
+}
+
+.cover-page .subtitle {
+  font-size: 16px;
+  font-weight: 500;
+  color: #475569;
+  margin: 0 0 16px 0;
+}
+
+.cover-page .description {
+  font-size: 14.5px;
+  line-height: 1.6;
+  margin: 0 0 28px 0;
+  color: #334155;
+  max-width: 660px;
+}
+
+.cover-page h2 {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  margin: 28px 0 10px 0;
+}
+
+.diagram-box {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 14px 18px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13.5px;
+  font-weight: 500;
+  background-color: #f8fafc;
+  color: #0f172a;
+  margin-bottom: 24px;
+}
+
+.stack-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin-bottom: 24px;
+  background-color: #ffffff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.stack-table th,
+.stack-table td {
+  border: 1px solid #e2e8f0;
+  padding: 10px 14px;
+  text-align: left;
+}
+
+.stack-table th {
+  background-color: #f1f5f9;
+  font-weight: 650;
+  color: #334155;
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stack-table td:first-child {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.api-list {
+  margin: 0 0 28px 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #334155;
+}
+
+.launch-btn {
+  display: inline-block;
+  padding: 10px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid #0f172a;
+  border-radius: 6px;
+  background-color: #0f172a;
+  color: #ffffff;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 120ms ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
+.launch-btn:hover {
+  background-color: #1e293b;
+  border-color: #1e293b;
+}
+
+.cover-footer {
+  margin-top: 40px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* Dark mode for Cover Page */
+@media (prefers-color-scheme: dark) {
+  .cover-page {
+    background-color: #0b0f14;
+    color: #f1f5f9;
+  }
+
+  .cover-page h1 {
+    color: #f8fafc;
+  }
+
+  .cover-page .subtitle {
+    color: #94a3b8;
+  }
+
+  .cover-page .description {
+    color: #cbd5e1;
+  }
+
+  .cover-page h2 {
+    color: #94a3b8;
+  }
+
+  .diagram-box {
+    border-color: #24303c;
+    background-color: #121820;
+    color: #f1f5f9;
+  }
+
+  .stack-table {
+    background-color: #121820;
+    color: #f1f5f9;
+    border-color: #24303c;
+  }
+
+  .stack-table th,
+  .stack-table td {
+    border-color: #24303c;
+  }
+
+  .stack-table th {
+    background-color: #17202a;
+    color: #cbd5e1;
+  }
+
+  .stack-table td:first-child {
+    color: #f8fafc;
+  }
+
+  .api-list {
+    color: #cbd5e1;
+  }
+
+  .launch-btn {
+    background-color: #f8fafc;
+    border-color: #f8fafc;
+    color: #0f172a;
+  }
+
+  .launch-btn:hover {
+    background-color: #e2e8f0;
+    border-color: #e2e8f0;
+  }
+
+  .cover-footer {
+    border-top-color: #1f2a36;
+    color: #94a3b8;
+  }
+}

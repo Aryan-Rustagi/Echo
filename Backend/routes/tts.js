@@ -1,18 +1,18 @@
-import express from "express";
-import { spawn } from "child_process";
-import fs from "fs";
-import path from "path";
-import os from "os";
-import { fileURLToPath } from "url";
-import { ElevenLabsClient } from "elevenlabs";
+const express = require("express");
+const { spawn } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
 
 const router = express.Router();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const modelPath = path.resolve(__dirname, "../voices/en_US-lessac-medium.onnx");
 
 function synthesizeWithPiper(text) {
   return new Promise(function (resolve, reject) {
+    if (!fs.existsSync(modelPath)) {
+      return reject(new Error("Piper voice model file not found"));
+    }
+
     const tempWav = path.join(
       os.tmpdir(),
       `piper_${Date.now()}_${Math.random().toString(36).slice(2)}.wav`
@@ -82,20 +82,54 @@ function synthesizeWithPiper(text) {
 }
 
 async function synthesizeWithElevenLabs(text) {
-  const client = new ElevenLabsClient({
-    apiKey: process.env.ELEVENLABS_API_KEY,
-  });
-
-  const audioStream = await client.textToSpeech.convert("JBFqnCBsd6RMkjVDRZzb", {
-    text: text,
-    modelId: "eleven_flash_v2_5",
-  });
-
-  const chunks = [];
-  for await (const chunk of audioStream) {
-    chunks.push(chunk);
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    throw new Error("ELEVENLABS_API_KEY not configured in .env");
   }
-  return Buffer.concat(chunks);
+
+  // Voice ID: JBFqnCBsd6RMkjVDRZzb (George) or 21m00Tcm4TlvDq8ikWAM (Rachel)
+  const voiceId = process.env.ELEVENLABS_VOICE_ID || "JBFqnCBsd6RMkjVDRZzb";
+  const controller = new AbortController();
+  const timeoutId = setTimeout(function handleTimeout() {
+    controller.abort();
+  }, 8000);
+
+  try {
+    const response = await fetch(
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_22050_32`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": apiKey,
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg",
+        },
+        body: JSON.stringify({
+          text: text,
+          model_id: "eleven_flash_v2_5",
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75,
+          },
+        }),
+        signal: controller.signal,
+      }
+    );
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("[TTS] ElevenLabs API error:", response.status, errText);
+      throw new Error(`ElevenLabs error: ${response.statusText || response.status}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
 }
 
 router.post("/", async function (req, res) {
@@ -112,7 +146,8 @@ router.post("/", async function (req, res) {
       res.setHeader("Content-Type", "audio/mpeg");
       res.setHeader("X-TTS-Provider", "elevenlabs");
       return res.send(buffer);
-    } catch (_err) {
+    } catch (elevenErr) {
+      console.error("[TTS] ElevenLabs failed:", elevenErr.message);
       return res.status(500).json({ error: "Speech synthesis failed" });
     }
   }
@@ -123,16 +158,16 @@ router.post("/", async function (req, res) {
     res.setHeader("X-TTS-Provider", "piper");
     return res.send(buffer);
   } catch (piperErr) {
-    console.error("[TTS] Piper failed:", piperErr);
     try {
       const buffer = await synthesizeWithElevenLabs(text);
       res.setHeader("Content-Type", "audio/mpeg");
       res.setHeader("X-TTS-Provider", "elevenlabs");
       return res.send(buffer);
-    } catch (_elevenErr) {
+    } catch (elevenErr) {
+      console.error("[TTS] Piper and ElevenLabs both failed:", elevenErr.message);
       return res.status(500).json({ error: "Speech synthesis failed" });
     }
   }
 });
 
-export default router;
+module.exports = router;

@@ -22,6 +22,24 @@ export async function startRecording(): Promise<void> {
     throw new Error("Microphone API not supported in this browser.");
   }
 
+  // If a previous recorder was active, stop its tracks cleanly first
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    try {
+      mediaRecorder.stop();
+    } catch (_e) {
+      // ignore
+    }
+    try {
+      const tracks = mediaRecorder.stream.getTracks();
+      for (let i = 0; i < tracks.length; i += 1) {
+        tracks[i].stop();
+      }
+    } catch (_e) {
+      // ignore
+    }
+    mediaRecorder = null;
+  }
+
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
   mimeType = pickMimeType();
@@ -31,7 +49,7 @@ export async function startRecording(): Promise<void> {
 
   chunks = [];
   mediaRecorder.ondataavailable = function handleData(e: BlobEvent) {
-    if (e.data.size > 0) {
+    if (e.data && e.data.size > 0) {
       chunks.push(e.data);
     }
   };
@@ -45,19 +63,51 @@ export function stopRecording(): Promise<Blob> {
       return reject(new Error("Not recording"));
     }
 
-    mediaRecorder.onstop = function handleMediaStop() {
-      const type = mediaRecorder?.mimeType || mimeType || "audio/webm";
-      const blob = new Blob(chunks, { type: type });
-      if (mediaRecorder) {
-        const tracks = mediaRecorder.stream.getTracks();
+    const currentRecorder = mediaRecorder;
+
+    function cleanupTracks() {
+      try {
+        const tracks = currentRecorder.stream.getTracks();
         for (let i = 0; i < tracks.length; i += 1) {
           tracks[i].stop();
         }
+      } catch (_e) {
+        // ignore
       }
+    }
+
+    if (currentRecorder.state === "inactive") {
+      cleanupTracks();
       mediaRecorder = null;
-      resolve(blob);
+      const type = currentRecorder.mimeType || mimeType || "audio/webm";
+      return resolve(new Blob(chunks, { type }));
+    }
+
+    let resolved = false;
+    function finish() {
+      if (!resolved) {
+        resolved = true;
+        cleanupTracks();
+        mediaRecorder = null;
+        const type = currentRecorder.mimeType || mimeType || "audio/webm";
+        resolve(new Blob(chunks, { type }));
+      }
+    }
+
+    currentRecorder.onstop = function handleMediaStop() {
+      finish();
     };
 
-    mediaRecorder.stop();
+    // Safety timeout in case browser onstop event fails to fire
+    const safetyTimeout = setTimeout(function handleTimeout() {
+      finish();
+    }, 1500);
+
+    try {
+      currentRecorder.stop();
+    } catch (err) {
+      clearTimeout(safetyTimeout);
+      finish();
+    }
   });
 }

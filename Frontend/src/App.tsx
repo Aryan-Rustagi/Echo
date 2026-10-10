@@ -3,11 +3,45 @@ import { startRecording, stopRecording } from "./pipeline/recorder";
 import { transcribe } from "./pipeline/stt";
 import { getResponse, Message } from "./pipeline/llm";
 import { speak } from "./pipeline/tts";
+import Cover from "./Cover";
 import "./App.css";
 
 const HISTORY_LIMIT = 8;
 
+function getNormalizedPath(): string {
+  if (typeof window === "undefined") return "/";
+  const hash = window.location.hash.replace(/^#/, "");
+  if (hash === "/app" || hash === "app") return "/app";
+  return window.location.pathname.replace(/\/+$/, "") || "/";
+}
+
 export default function App() {
+  const [currentPath, setCurrentPath] = useState<string>(() => getNormalizedPath());
+
+  useEffect(() => {
+    function handleLocation() {
+      setCurrentPath(getNormalizedPath());
+    }
+    window.addEventListener("popstate", handleLocation);
+    window.addEventListener("hashchange", handleLocation);
+    return () => {
+      window.removeEventListener("popstate", handleLocation);
+      window.removeEventListener("hashchange", handleLocation);
+    };
+  }, []);
+
+  function navigate(to: string) {
+    if (window.location.pathname !== to && window.location.hash !== `#${to}`) {
+      window.history.pushState({}, "", to);
+      setCurrentPath(to);
+      window.scrollTo(0, 0);
+    }
+  }
+
+  if (currentPath !== "/app") {
+    return <Cover onStart={() => navigate("/app")} />;
+  }
+
   const [state, setState] = useState<"idle" | "recording" | "transcribing" | "thinking" | "speaking">("idle");
   const [ttsProvider, setTtsProvider] = useState<"piper" | "elevenlabs">("piper");
   const [messages, setMessages] = useState<Message[]>([]);

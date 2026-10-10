@@ -64,6 +64,14 @@ export async function startSpeechmaticsTranscription(
 
   socket = new WebSocket(`wss://eu2.rt.speechmatics.com/v2?jwt=${jwt}`);
 
+  let errorReported = false;
+  function reportError(err: Error) {
+    if (!errorReported && !isStopped) {
+      errorReported = true;
+      onError(err);
+    }
+  }
+
   socket.onmessage = async function handleMessage(event: MessageEvent) {
     try {
       const message = JSON.parse(event.data as string) as {
@@ -87,7 +95,7 @@ export async function startSpeechmaticsTranscription(
           });
         } catch (micErr: unknown) {
           const errorObj = micErr instanceof Error ? micErr : new Error(String(micErr));
-          onError(errorObj);
+          reportError(errorObj);
         }
       } else if (message.message === "AddPartialTranscript") {
         const text = message.metadata?.transcript;
@@ -106,7 +114,7 @@ export async function startSpeechmaticsTranscription(
         }
       } else if (message.message === "Error") {
         void cleanup();
-        onError(new Error(`Speechmatics Error: ${message.reason ?? "Unknown error"}`));
+        reportError(new Error(`Speechmatics Error: ${message.reason ?? "Unknown error"}`));
       }
     } catch (e: unknown) {
       console.error("Error parsing Speechmatics message", e);
@@ -119,7 +127,7 @@ export async function startSpeechmaticsTranscription(
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.close();
     }
-    onError(new Error("Speechmatics connection failed."));
+    reportError(new Error("Speechmatics connection failed."));
   };
 
   socket.onclose = function handleClose() {
