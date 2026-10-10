@@ -37,6 +37,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Restrict CORS to allowlist (including http://localhost:5173 and http://127.0.0.1:5173)
+const path = require("path");
+const fs = require("fs");
+
 const defaultOrigins = ["http://localhost:5173", "http://127.0.0.1:5173"];
 const envOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map(function trimOrigin(origin) {
@@ -47,7 +50,13 @@ const allowedOrigins = Array.from(new Set(defaultOrigins.concat(envOrigins)));
 
 const corsOptions = {
   origin: function validateOrigin(origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    if (
+      !origin ||
+      allowedOrigins.indexOf(origin) !== -1 ||
+      allowedOrigins.indexOf("*") !== -1 ||
+      origin.endsWith(".up.railway.app") ||
+      origin.endsWith(".railway.app")
+    ) {
       return callback(null, true);
     }
     return callback(null, false);
@@ -74,14 +83,37 @@ const apiLimiter = rateLimit({
   message: { error: "Too many requests, please try again later." },
 });
 
-app.get("/", function handleRoot(req, res) {
-  res.send("Server is running");
+// Health check endpoint for Railway, Docker, and uptime monitoring
+app.get("/api/health", function handleHealth(req, res) {
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// API Routes
 app.use("/api/transcribe", transcribeRoute);
 app.use("/api/chat", apiLimiter, chatRoute);
 app.use("/api/tts", apiLimiter, ttsRoute);
 app.use("/api/stt-keys", apiLimiter, sttKeysRoute);
+
+// Serve frontend static assets and handle SPA routing in production
+const publicBuildDir = path.resolve(__dirname, "public");
+const frontendDistDir = path.resolve(__dirname, "../Frontend/Echo/dist");
+const staticDir = fs.existsSync(publicBuildDir)
+  ? publicBuildDir
+  : (fs.existsSync(frontendDistDir) ? frontendDistDir : null);
+
+if (staticDir) {
+  app.use(express.static(staticDir));
+  app.use(function handleSpaFallback(req, res, next) {
+    if (req.method !== "GET") {
+      return next();
+    }
+    res.sendFile(path.join(staticDir, "index.html"));
+  });
+} else {
+  app.get("/", function handleRoot(req, res) {
+    res.send("Server is running");
+  });
+}
 
 app.listen(PORT, function handleListen() {
   console.log("Server is running on Port:", PORT);
