@@ -92,7 +92,7 @@ async function synthesizeWithElevenLabs(text) {
   const controller = new AbortController();
   const timeoutId = setTimeout(function handleTimeout() {
     controller.abort();
-  }, 8000);
+  }, 4000);
 
   try {
     const response = await fetch(
@@ -138,35 +138,38 @@ router.post("/", async function (req, res) {
     return res.status(400).json({ error: "No text provided" });
   }
 
+  // Cap text to 500 characters to prevent API credit exhaustion
+  const sanitizedText = text.trim().slice(0, 500);
   const provider = req.body && req.body.provider;
 
-  if (provider === "elevenlabs") {
+  if (provider === "piper") {
+    if (!fs.existsSync(modelPath)) {
+      return res.status(404).json({ error: "Piper voice model not found on server" });
+    }
     try {
-      const buffer = await synthesizeWithElevenLabs(text);
-      res.setHeader("Content-Type", "audio/mpeg");
-      res.setHeader("X-TTS-Provider", "elevenlabs");
+      const buffer = await synthesizeWithPiper(sanitizedText);
+      res.setHeader("Content-Type", "audio/wav");
+      res.setHeader("X-TTS-Provider", "piper");
       return res.send(buffer);
-    } catch (elevenErr) {
-      console.error("[TTS] ElevenLabs failed:", elevenErr.message);
-      return res.status(500).json({ error: "Speech synthesis failed" });
+    } catch (piperErr) {
+      console.error("[TTS] Piper failed:", piperErr.message);
+      return res.status(500).json({ error: "Piper speech synthesis failed" });
     }
   }
 
+  // Default to ElevenLabs
+  if (!process.env.ELEVENLABS_API_KEY) {
+    return res.status(503).json({ error: "ELEVENLABS_API_KEY is not configured on server" });
+  }
+
   try {
-    const buffer = await synthesizeWithPiper(text);
-    res.setHeader("Content-Type", "audio/wav");
-    res.setHeader("X-TTS-Provider", "piper");
+    const buffer = await synthesizeWithElevenLabs(sanitizedText);
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("X-TTS-Provider", "elevenlabs");
     return res.send(buffer);
-  } catch (piperErr) {
-    try {
-      const buffer = await synthesizeWithElevenLabs(text);
-      res.setHeader("Content-Type", "audio/mpeg");
-      res.setHeader("X-TTS-Provider", "elevenlabs");
-      return res.send(buffer);
-    } catch (elevenErr) {
-      console.error("[TTS] Piper and ElevenLabs both failed:", elevenErr.message);
-      return res.status(500).json({ error: "Speech synthesis failed" });
-    }
+  } catch (elevenErr) {
+    console.error("[TTS] ElevenLabs failed:", elevenErr.message);
+    return res.status(500).json({ error: "Speech synthesis failed" });
   }
 });
 

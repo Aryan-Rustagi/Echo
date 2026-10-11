@@ -40,12 +40,12 @@ export default function Cover({ onStart }: CoverProps) {
       name: "2. Speech-to-Text",
       badge: "STT Layer",
       sub: "Real-Time Streaming STT",
-      tech: "Speechmatics Flow · Deepgram Nova-2 · OpenAI Whisper",
+      tech: "Speechmatics Flow · Deepgram Nova-3 · OpenAI Whisper",
       latency: "150ms – 350ms",
       desc: "Streams audio chunks over WebSocket for instant partial and final transcripts with sub-second accuracy.",
       details: [
         "Primary: Speechmatics Flow WebSocket with live word-level confidence",
-        "Secondary: Deepgram Nova-2 streaming WebSocket via ephemeral backend tokens",
+        "Secondary: Deepgram Nova-3 streaming WebSocket via ephemeral backend tokens",
         "Tertiary Fallback: Whisper REST API using recorded audio blobs if sockets disconnect"
       ]
     },
@@ -290,7 +290,7 @@ export default function Cover({ onStart }: CoverProps) {
                 <div className="tier-row secondary">
                   <span className="tier-badge">Tier 2 Backup</span>
                   <div className="tier-info">
-                    <strong>Deepgram Nova-2</strong>
+                    <strong>Deepgram Nova-3</strong>
                     <p>Sub-200ms real-time WebSocket transcription with smart punctuation and speech-final events.</p>
                   </div>
                 </div>

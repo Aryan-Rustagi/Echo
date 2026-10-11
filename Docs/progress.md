@@ -203,3 +203,45 @@ non-streaming LLM fallback.
    - Passed `provider` parameter through `streamResponse` and `getResponse`.
    - Wired automated fallback in `chat.js`: if Gemini stream or request fails, the server automatically catches the exception and falls back to OpenAI stream, preventing turn abandonment.
 
+## Phase 7: Codebase Hardening, Bug Fixes & Stale Code Cleanup
+
+### [Date: Oct 11, 2026] - Production Hardening & Bug Fixes
+**What was done:**
+1. **Stale Codebase Cleanup (`Frontend/src` & `Backend/package.json`):**
+   - Replaced orphaned, broken files in `Frontend/src/` with clean re-export shims pointing to the active `Frontend/Echo/src` application and added a deprecation `README.md`.
+   - Removed unused `ws` dependency from `Backend/package.json`.
+2. **Provider Auto-Resolution & Groq Model Fix (`Backend/routes/chat.js`):**
+   - Replaced the invalid Groq model identifier (`openai/gpt-oss-120b`) with `process.env.GROQ_MODEL || "llama-3.3-70b-versatile"`.
+   - Added `resolveProvider()` to automatically route chat requests to the configured provider (`OPENAI_API_KEY` or `GEMINI_API_KEY`) without throwing failed attempts.
+   - Guarded `formatGeminiContents()` to ensure the message array always contains at least one valid user turn.
+3. **API 404 & SPA Routing Isolation (`Backend/server.js`):**
+   - Added an explicit JSON 404 handler for `/api/*` routes.
+   - Guarded `handleSpaFallback` with `!req.path.startsWith("/api")` to prevent unmatched API requests from returning `index.html` with status 200.
+   - Enriched `/api/health` to report provider configuration status.
+4. **Whisper Transcription Sensitivity Tuning (`Backend/routes/transcribe.js`):**
+   - Calibrated the file size cutoff to 1,200 bytes so valid short utterances ("yes", "no", "hi") are not dropped, while filtering empty header-only files and hallucinated filler.
+   - Added server-side API key validation returning 500 JSON if neither `GROQ_API_KEY` nor `OPENAI_API_KEY` is set.
+5. **Audio Queue Race Condition & Barge-in Fix (`Frontend/Echo/src/pipeline/tts.ts`):**
+   - Added `item.abortController.signal.aborted` checks in `processQueue()` to prevent aborted audio promises from playing audio after barge-in or session resets.
+   - Tracked `currentPlayingItem` so `stopAll()` immediately cancels in-flight synthesis and drains active Web Audio buffers.
+6. **Spacebar Keyboard Accessibility & Transcript Fallback (`Frontend/Echo/src/LandingPage.tsx`):**
+   - Added a global `keydown` event listener for `Space` (ignoring input/textarea/select focus) fulfilling the push-to-talk promise.
+   - Added interim transcript fallback so clicking Stop before socket finalization doesn't discard spoken input.
+
+## Phase 8: Frontend Simplification & Cover Page Removal
+
+### [Date: Oct 11, 2026] - Simplified Voice Interface
+**Commit:** `feat: simplify frontend interface and remove cover page`
+
+**What was done:**
+1. **Removed Cover Page & Route Overhead (`Frontend/Echo/src/App.tsx`):**
+   - Eliminated the intermediate Cover documentation page and route switching (`/` vs `/app`).
+   - `App.tsx` directly renders the conversational voice assistant interface without routing barriers.
+2. **Simplified Conversational Interface (`Frontend/Echo/src/LandingPage.tsx`):**
+   - Removed `LandingPageProps`, `onNavigateToCover`, and the "Architecture Overview" button.
+   - Replaced permanently exposed provider selector grids with a clean collapsible Settings panel (`showSettings`), keeping the default view 100% focused on voice conversation.
+   - Added keyboard shortcut badges and improved live state visualizers.
+3. **Refined Modern Styles & Dark Mode (`Frontend/Echo/src/App.css`):**
+   - Styled an elevated hero voice card with responsive controls, animated audio wave/pulse states, and polished conversation bubbles.
+   - Full dark mode and mobile responsive layout support.
+

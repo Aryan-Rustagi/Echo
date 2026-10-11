@@ -88,3 +88,18 @@ The LLM stream is bounded by a 2.5-second client timeout. If the streaming
 endpoint stalls, the frontend retries the regular chat endpoint. Browser TTS
 does not wait for remote audio generation, so the first sentence starts
 speaking as soon as the response is available.
+
+---
+
+## Fallback Matrix
+
+| Layer | Primary (Tier 1) | Secondary (Tier 2) | Tertiary Fallback (Tier 3) |
+| :--- | :--- | :--- | :--- |
+| **STT** | **Speechmatics Flow** (Realtime WebSocket) | **Deepgram Nova-3** (Realtime WebSocket) | **Groq / OpenAI Whisper** (REST `/api/transcribe`) |
+| **LLM** | **Google Gemini Flash** (SSE Stream) | **OpenAI GPT-4o-mini** (SSE Stream) | **Groq LLaMA 3.3 70B** |
+| **TTS** | **ElevenLabs Flash v2.5** (Parallel Fetch) | **Piper Local ONNX** (Server-side) | **Browser SpeechSynthesis** (Watchdog Recovery) |
+
+## Controls & Interaction
+* **Push-to-Talk**: Click **Start Speaking** or tap **Spacebar**.
+* **Interruption (Barge-In)**: Tap Spacebar, click Stop, or begin speaking while Echo is talking. The pipeline terminates active speech and inference immediately via `AbortController`.
+* **Continuous Mode**: Toggle on for hands-free conversations where the microphone automatically re-arms after Echo finishes speaking.

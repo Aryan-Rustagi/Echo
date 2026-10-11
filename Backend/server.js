@@ -85,7 +85,18 @@ const apiLimiter = rateLimit({
 
 // Health check endpoint for Railway, Docker, and uptime monitoring
 app.get("/api/health", function handleHealth(req, res) {
-  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  res.status(200).json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    configured: {
+      gemini: Boolean(process.env.GEMINI_API_KEY),
+      openai: Boolean(process.env.OPENAI_API_KEY),
+      groq: Boolean(process.env.GROQ_API_KEY),
+      deepgram: Boolean(process.env.DEEPGRAM_API_KEY),
+      speechmatics: Boolean(process.env.SPEECHMATICS_API_KEY),
+      elevenlabs: Boolean(process.env.ELEVENLABS_API_KEY),
+    },
+  });
 });
 
 // API Routes
@@ -93,6 +104,11 @@ app.use("/api/transcribe", transcribeRoute);
 app.use("/api/chat", apiLimiter, chatRoute);
 app.use("/api/tts", apiLimiter, ttsRoute);
 app.use("/api/stt-keys", apiLimiter, sttKeysRoute);
+
+// Dedicated 404 handler for unmatched API routes
+app.use("/api", function handleApiNotFound(req, res) {
+  res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
+});
 
 // Serve frontend static assets and handle SPA routing in production
 const publicBuildDir = path.resolve(__dirname, "public");
@@ -104,7 +120,7 @@ const staticDir = fs.existsSync(publicBuildDir)
 if (staticDir) {
   app.use(express.static(staticDir));
   app.use(function handleSpaFallback(req, res, next) {
-    if (req.method !== "GET") {
+    if (req.method !== "GET" || req.path.startsWith("/api")) {
       return next();
     }
     res.sendFile(path.join(staticDir, "index.html"));
