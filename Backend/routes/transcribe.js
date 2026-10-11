@@ -14,24 +14,28 @@ router.post("/", upload.single("audio"), async function handleTranscribe(req, re
 
   console.log(`Received audio file: ${req.file.originalname} (${req.file.size} bytes)`);
 
-  // A webm/ogg file with just a header is around ~1KB. If it's less than 4KB, it's virtually empty/silent.
-  if (req.file.size < 4000) {
-    console.log("Audio file too small (likely empty). Skipping Whisper to avoid hallucinations.");
+  // An empty webm/ogg file with just an EBML header is around 500-800 bytes.
+  if (req.file.size < 1200) {
+    console.log("Audio file too small (header only). Skipping Whisper to avoid hallucinations.");
     return res.json({ transcript: "" });
+  }
+
+  const isGroq = Boolean(process.env.GROQ_API_KEY);
+  const apiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: "Neither GROQ_API_KEY nor OPENAI_API_KEY is configured on the server." });
   }
 
   try {
     const formData = new FormData();
-    const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
+    const blob = new Blob([req.file.buffer], { type: req.file.mimetype || "audio/webm" });
 
-    const isGroq = Boolean(process.env.GROQ_API_KEY);
-    const apiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
     const endpoint = isGroq
       ? "https://api.groq.com/openai/v1/audio/transcriptions"
       : "https://api.openai.com/v1/audio/transcriptions";
     const model = isGroq ? "whisper-large-v3-turbo" : "whisper-1";
 
-    formData.append("file", blob, req.file.originalname);
+    formData.append("file", blob, req.file.originalname || "recording.webm");
     formData.append("model", model);
     formData.append("response_format", "verbose_json");
     formData.append("temperature", "0");

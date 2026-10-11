@@ -69,6 +69,13 @@ function formatGeminiContents(cleaned) {
     contents.shift();
   }
 
+  if (contents.length === 0 && cleaned.length > 0) {
+    contents.push({
+      role: "user",
+      parts: [{ text: cleaned[cleaned.length - 1].content }],
+    });
+  }
+
   return contents;
 }
 
@@ -79,7 +86,7 @@ async function callGeminiNonStreaming(cleaned) {
     throw new Error("GEMINI_API_KEY is not configured in .env");
   }
 
-  const geminiModel = process.env.GEMINI_MODEL || "gemini-flash-latest";
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-1.5-flash";
   const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`;
   const geminiContents = formatGeminiContents(cleaned);
 
@@ -130,7 +137,9 @@ async function callOpenAINonStreaming(cleaned) {
   const url = isGroq
     ? "https://api.groq.com/openai/v1/chat/completions"
     : "https://api.openai.com/v1/chat/completions";
-  const model = isGroq ? "openai/gpt-oss-120b" : "gpt-4o-mini";
+  const model = isGroq
+    ? (process.env.GROQ_MODEL || "llama-3.3-70b-versatile")
+    : (process.env.OPENAI_MODEL || "gpt-4o-mini");
 
   const payloadMessages = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -170,7 +179,7 @@ async function streamGemini(cleaned, res, abortSignal) {
     throw new Error("GEMINI_API_KEY is not configured in .env");
   }
 
-  const geminiModel = process.env.GEMINI_MODEL || "gemini-flash-latest";
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-1.5-flash";
   const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:streamGenerateContent?alt=sse`;
   const geminiContents = formatGeminiContents(cleaned);
 
@@ -270,7 +279,9 @@ async function streamOpenAI(cleaned, res, abortSignal) {
   const url = isGroq
     ? "https://api.groq.com/openai/v1/chat/completions"
     : "https://api.openai.com/v1/chat/completions";
-  const model = isGroq ? "openai/gpt-oss-120b" : "gpt-4o-mini";
+  const model = isGroq
+    ? (process.env.GROQ_MODEL || "llama-3.3-70b-versatile")
+    : (process.env.OPENAI_MODEL || "gpt-4o-mini");
 
   const payloadMessages = [
     { role: "system", content: SYSTEM_PROMPT },
@@ -354,6 +365,27 @@ async function streamOpenAI(cleaned, res, abortSignal) {
   return res.end();
 }
 
+function resolveProvider(requested) {
+  if (requested === "openai") {
+    if (process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY) {
+      return "openai";
+    }
+    if (process.env.GEMINI_API_KEY) {
+      return "gemini";
+    }
+    return "openai";
+  }
+
+  // Requested gemini (or default)
+  if (process.env.GEMINI_API_KEY) {
+    return "gemini";
+  }
+  if (process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY) {
+    return "openai";
+  }
+  return "gemini";
+}
+
 // 1. Non-streaming chat route
 router.post("/", async function handleChat(req, res) {
   let { messages, message, provider } = req.body;
@@ -367,7 +399,7 @@ router.post("/", async function handleChat(req, res) {
     return res.status(400).json({ error: "No valid messages provided" });
   }
 
-  const targetProvider = provider === "openai" ? "openai" : "gemini";
+  const targetProvider = resolveProvider(provider);
 
   if (targetProvider === "gemini") {
     try {
@@ -405,7 +437,7 @@ router.post("/stream", async function handleChatStream(req, res) {
     abortController.abort();
   });
 
-  const targetProvider = provider === "openai" ? "openai" : "gemini";
+  const targetProvider = resolveProvider(provider);
 
   if (targetProvider === "gemini") {
     try {

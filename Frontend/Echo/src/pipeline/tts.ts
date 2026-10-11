@@ -13,6 +13,7 @@ let audioContext: AudioContext | null = null;
 let queue: QueueItem[] = [];
 let isPlaying = false;
 let currentSourceNode: AudioBufferSourceNode | null = null;
+let currentPlayingItem: QueueItem | null = null;
 let nextItemId = 1;
 let onFirstAudioCallback: (() => void) | null = null;
 let firstAudioFired = false;
@@ -167,6 +168,7 @@ async function processQueue(): Promise<void> {
   }
 
   if (queue.length === 0) {
+    currentPlayingItem = null;
     const resolvers = queueDrainResolvers;
     queueDrainResolvers = [];
     for (let i = 0; i < resolvers.length; i += 1) {
@@ -179,14 +181,25 @@ async function processQueue(): Promise<void> {
   const item = queue.shift();
   if (!item) {
     isPlaying = false;
+    currentPlayingItem = null;
     return;
   }
+
+  currentPlayingItem = item;
 
   let audioBuffer: AudioBuffer | null = null;
   try {
     audioBuffer = await item.audioPromise;
   } catch (error) {
     console.warn(`[TTS] ${selectedProvider} failed; using browser speech instead.`, error);
+  }
+
+  // If the turn or item was aborted while fetching/decoding audio, exit immediately!
+  if (item.abortController.signal.aborted) {
+    currentPlayingItem = null;
+    isPlaying = false;
+    void processQueue();
+    return;
   }
 
   // Signal first audio start for timing and UI state
@@ -199,24 +212,51 @@ async function processQueue(): Promise<void> {
 
   if (audioBuffer) {
     await new Promise<void>(function playBuffer(resolve) {
+      if (item.abortController.signal.aborted) {
+        return resolve();
+      }
+
       const ctx = getAudioContext();
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(ctx.destination);
       currentSourceNode = source;
 
-      source.onended = function handleEnded() {
-        currentSourceNode = null;
-        resolve();
-      };
+      let settled = false;
+      function handleDone() {
+        if (!settled) {
+          settled = true;
+          currentSourceNode = null;
+          resolve();
+        }
+      }
 
-      source.start(0);
+      source.onended = handleDone;
+
+      item.abortController.signal.addEventListener("abort", function handleAbort() {
+        try {
+          source.stop();
+          source.disconnect();
+        } catch (_e) {
+          // ignore
+        }
+        handleDone();
+      }, { once: true });
+
+      try {
+        source.start(0);
+      } catch (_startErr) {
+        handleDone();
+      }
     });
   } else {
-    // Fall back to browser SpeechSynthesis for this sentence
-    await speakWithBrowserTTS(item.text);
+    // Fall back to browser SpeechSynthesis for this sentence if not aborted
+    if (!item.abortController.signal.aborted) {
+      await speakWithBrowserTTS(item.text);
+    }
   }
 
+  currentPlayingItem = null;
   isPlaying = false;
   void processQueue();
 }
@@ -254,6 +294,15 @@ export function enqueueSentence(text: string, turnSignal?: AbortSignal): void {
 }
 
 export function stopAll(): void {
+  if (currentPlayingItem) {
+    try {
+      currentPlayingItem.abortController.abort();
+    } catch (_e) {
+      // ignore
+    }
+    currentPlayingItem = null;
+  }
+
   for (let i = 0; i < queue.length; i += 1) {
     try {
       queue[i].abortController.abort();

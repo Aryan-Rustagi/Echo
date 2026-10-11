@@ -22,11 +22,8 @@ interface FinishTurnFn {
   (): Promise<void>;
 }
 
-export interface LandingPageProps {
-  onNavigateToCover?: () => void;
-}
-
-export default function LandingPage({ onNavigateToCover }: LandingPageProps = {}) {
+export default function LandingPage() {
+  const [showSettings, setShowSettings] = useState<boolean>(false);
   const [status, setStatus] = useState<Status>("idle");
   const [engine, setEngine] = useState<Engine>("speechmatics");
   const [llmProvider, setLlmProvider] = useState<LlmProvider>("gemini");
@@ -69,6 +66,31 @@ export default function LandingPage({ onNavigateToCover }: LandingPageProps = {}
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current);
       }
+      if (turnAbortControllerRef.current) {
+        turnAbortControllerRef.current.abort();
+      }
+      stopAll();
+      if (transcriptionControllerRef.current) {
+        void transcriptionControllerRef.current.stop();
+      }
+    };
+  }, []);
+
+  useEffect(function setupKeyboardShortcut() {
+    function handleKeyDown(e: KeyboardEvent) {
+      const activeTag = (document.activeElement?.tagName || "").toLowerCase();
+      if (activeTag === "input" || activeTag === "textarea" || activeTag === "select") {
+        return;
+      }
+      if (e.code === "Space" && !e.repeat) {
+        e.preventDefault();
+        void handleToggle();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
 
@@ -192,7 +214,12 @@ export default function LandingPage({ onNavigateToCover }: LandingPageProps = {}
       }
     }
 
-    const currentText = finalizedTextRef.current.trim();
+    let currentText = finalizedTextRef.current.trim();
+    if (!currentText && transcript.trim()) {
+      currentText = transcript.trim();
+      finalizedTextRef.current = currentText;
+    }
+
     if (!currentText) {
       setErrorMsg("No speech detected. Try again.");
       updateStatus("idle");
@@ -411,112 +438,152 @@ export default function LandingPage({ onNavigateToCover }: LandingPageProps = {}
 
   return (
     <div className="container">
-      <div className="header-bar">
-        <div>
-          <div className="brand-tag">VOICE AI PIPELINE</div>
+      <header className="header-bar">
+        <div className="brand-group">
+          <div className="brand-tag-wrapper">
+            <span className="brand-tag">VOICE AI</span>
+            <span className="brand-version">v1.0</span>
+          </div>
           <h1 className="main-title">ECHO</h1>
           <p className="subtitle">Real-time modular conversational assistant</p>
         </div>
-        {onNavigateToCover && (
+
+        <div className="header-actions">
           <button
             type="button"
-            className="nav-btn"
-            onClick={onNavigateToCover}
-            aria-label="View architecture overview"
+            className={`btn-settings-toggle ${showSettings ? "active" : ""}`}
+            onClick={() => setShowSettings((prev) => !prev)}
+            aria-label="Toggle pipeline settings"
+            title="Configure STT, TTS, and LLM providers"
           >
-            Architecture Overview →
+            <span className="icon">⚙️</span>
+            <span className="label">Settings</span>
+            <span className="settings-preview">
+              {engine === "speechmatics" ? "Speechmatics" : "Deepgram"} · {llmProvider === "gemini" ? "Gemini" : "OpenAI"}
+            </span>
           </button>
-        )}
-      </div>
 
-      <div className="actions">
-        <div className="actions-selectors">
-          <div className="select-group">
-            <span className="select-label">STT</span>
-            <select
-              className="engine-select"
-              value={engine}
-              onChange={handleEngineChange}
-              disabled={status !== "idle" && status !== "error"}
-              aria-label="Select STT engine"
-              title="Speech-to-Text Engine"
-            >
-              <option value="speechmatics">Speechmatics (Realtime)</option>
-              <option value="deepgram">Deepgram (Realtime)</option>
-            </select>
-          </div>
-
-          <div className="select-group">
-            <span className="select-label">TTS</span>
-            <select
-              className="engine-select"
-              value={ttsProvider}
-              onChange={handleTtsProviderChange}
-              disabled={status !== "idle" && status !== "error"}
-              aria-label="Select text to speech provider"
-              title="Text to Speech Provider"
-            >
-              <option value="elevenlabs">ElevenLabs Flash</option>
-              <option value="browser">Browser Voice</option>
-              <option value="piper">Piper (Local)</option>
-            </select>
-          </div>
-
-          <div className="select-group">
-            <span className="select-label">LLM</span>
-            <select
-              className="engine-select"
-              value={llmProvider}
-              onChange={handleLlmProviderChange}
-              disabled={status !== "idle" && status !== "error"}
-              aria-label="Select LLM model"
-              title="LLM Model"
-            >
-              <option value="gemini">Gemini Flash</option>
-              <option value="openai">OpenAI (GPT-4o-mini)</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="actions-controls">
           <button
-            className={`btn btn-toggle ${status === "recording" ? "btn-recording" : "btn-start"}`}
+            type="button"
+            className="btn btn-secondary btn-header-action"
+            onClick={handleNewSession}
+            disabled={status === "recording" || status === "thinking"}
+            aria-label="Start new session"
+            title="Clear conversation history"
+          >
+            <span className="icon">↺</span>
+            <span>New Session</span>
+          </button>
+        </div>
+      </header>
+
+      {showSettings && (
+        <section className="settings-panel" aria-label="Pipeline configuration">
+          <div className="settings-header">
+            <span className="settings-title">Modular Pipeline Configuration</span>
+            <span className="settings-hint">Select provider models for STT, TTS, and LLM reasoning</span>
+          </div>
+          <div className="actions-selectors">
+            <div className="select-group">
+              <label htmlFor="stt-select" className="select-label">STT</label>
+              <select
+                id="stt-select"
+                className="engine-select"
+                value={engine}
+                onChange={handleEngineChange}
+                disabled={status !== "idle" && status !== "error"}
+                aria-label="Select STT engine"
+                title="Speech-to-Text Engine"
+              >
+                <option value="speechmatics">Speechmatics (Realtime)</option>
+                <option value="deepgram">Deepgram (Realtime)</option>
+              </select>
+            </div>
+
+            <div className="select-group">
+              <label htmlFor="tts-select" className="select-label">TTS</label>
+              <select
+                id="tts-select"
+                className="engine-select"
+                value={ttsProvider}
+                onChange={handleTtsProviderChange}
+                disabled={status !== "idle" && status !== "error"}
+                aria-label="Select text to speech provider"
+                title="Text to Speech Provider"
+              >
+                <option value="elevenlabs">ElevenLabs Flash</option>
+                <option value="browser">Browser Voice</option>
+                <option value="piper">Piper (Local)</option>
+              </select>
+            </div>
+
+            <div className="select-group">
+              <label htmlFor="llm-select" className="select-label">LLM</label>
+              <select
+                id="llm-select"
+                className="engine-select"
+                value={llmProvider}
+                onChange={handleLlmProviderChange}
+                disabled={status !== "idle" && status !== "error"}
+                aria-label="Select LLM model"
+                title="LLM Model"
+              >
+                <option value="gemini">Gemini Flash</option>
+                <option value="openai">OpenAI (GPT-4o-mini)</option>
+              </select>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <div className="voice-card">
+        <div className="voice-main-row">
+          <button
+            className={`btn btn-toggle ${
+              status === "recording"
+                ? "btn-recording"
+                : status === "speaking"
+                ? "btn-speaking"
+                : "btn-start"
+            }`}
             type="button"
             onClick={handleToggle}
             disabled={status === "transcribing" || status === "thinking"}
+            aria-label={
+              status === "recording"
+                ? "Stop recording"
+                : status === "speaking"
+                ? "Stop assistant speaking"
+                : "Start speaking"
+            }
           >
             {status === "recording" ? (
               <>
-                <span className="btn-icon">⏹</span> Stop Recording
+                <span className="btn-icon">⏹</span>
+                <span>Stop Recording</span>
               </>
             ) : status === "speaking" ? (
               <>
-                <span className="btn-icon">⏹</span> Stop Speaking
+                <span className="btn-icon">⏹</span>
+                <span>Stop Speaking</span>
               </>
             ) : (
               <>
-                <span className="btn-icon">●</span> Start Speaking
+                <span className="btn-icon">🎙️</span>
+                <span>Start Speaking</span>
+                <span className="btn-kbd">Space</span>
               </>
             )}
           </button>
 
-          <button
-            className="btn btn-secondary"
-            type="button"
-            onClick={handleNewSession}
-            disabled={status === "recording" || status === "thinking"}
-          >
-            New Session
-          </button>
-
-          <label className="toggle-label">
+          <label className="toggle-label" title="Automatically re-open mic when Echo finishes speaking">
             <input
               className="toggle-checkbox"
               type="checkbox"
               checked={continuousMode}
               onChange={handleContinuousChange}
             />
-            Continuous mode
+            <span>Continuous mode</span>
           </label>
 
           <div className="status-container">
@@ -526,40 +593,48 @@ export default function LandingPage({ onNavigateToCover }: LandingPageProps = {}
             </span>
           </div>
         </div>
-      </div>
 
-      <div className="status-bar">
-        {status === "recording" && (
-          <span className="mic-live-indicator" aria-live="polite">
-            <span className="live-dot"></span> Listening for speech...
-          </span>
-        )}
+        {(status === "recording" || latencyMs !== null) && (
+          <div className="voice-status-bar">
+            {status === "recording" && (
+              <span className="mic-live-indicator" aria-live="polite">
+                <span className="live-dot"></span>
+                <span>Listening for speech...</span>
+              </span>
+            )}
 
-        {latencyMs !== null && (
-          <span className="latency-readout" aria-live="polite">
-            ⚡ {latencyMs}ms to first audio
-          </span>
+            {latencyMs !== null && (
+              <span className="latency-readout" aria-live="polite" title="Time from speech end to first audio playback">
+                ⚡ {latencyMs}ms latency
+              </span>
+            )}
+          </div>
         )}
       </div>
 
       {fallbackNotice && (
         <div className="fallback-notice" role="alert">
-          {fallbackNotice}
+          <span className="notice-icon">⚠️</span>
+          <span>{fallbackNotice}</span>
         </div>
       )}
 
       {status === "error" && (
         <div className="error-alert" role="alert">
-          {errorMsg}
+          <span className="notice-icon">⛔</span>
+          <span>{errorMsg}</span>
         </div>
       )}
 
-      <div className="blocks" ref={logRef}>
+      <main className="blocks" ref={logRef} aria-label="Conversation history">
         {messages.length === 0 && !transcript && !response && (
           <div className="empty-notice">
-            <div className="empty-icon">🎙️</div>
-            <div className="empty-title">Ready to converse</div>
-            <div className="empty-desc">Click <strong>Start Speaking</strong> or spacebar to speak. Echo will transcribe, generate, and answer out loud.</div>
+            <div className="empty-icon-orb">🎙️</div>
+            <h2 className="empty-title">Ready to converse</h2>
+            <p className="empty-desc">
+              Click <strong>Start Speaking</strong> or press the <kbd className="empty-kbd">Space</kbd> key to talk.
+              Echo will transcribe in real-time, stream reasoning tokens, and reply out loud.
+            </p>
           </div>
         )}
 
@@ -615,11 +690,11 @@ export default function LandingPage({ onNavigateToCover }: LandingPageProps = {}
               </span>
             </div>
             <div className="text-box thinking-text">
-              Thinking...
+              <span className="thinking-dots">Thinking...</span>
             </div>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

@@ -135,8 +135,8 @@ export async function streamResponse(
     if (signal?.aborted) {
       throw err;
     }
-    const fallback = await getResponse(messages, provider);
     if (!accumulated) {
+      const fallback = await getResponse(messages, provider);
       onToken(fallback);
       accumulated = fallback;
     }
