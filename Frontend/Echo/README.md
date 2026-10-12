@@ -2,6 +2,8 @@
 
 React 19 + TypeScript + Vite web client for the **Echo** Voice AI Pipeline.
 
+> 🌐 **Live Demo:** [https://echo-production-aa12.up.railway.app/](https://echo-production-aa12.up.railway.app/)
+
 ## Key Modules
 
 * `src/LandingPage.tsx`: Main voice assistant conversational interface.

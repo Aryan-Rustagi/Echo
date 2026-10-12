@@ -1,5 +1,7 @@
 # ECHO
 
+> 🌐 **Live Demo:** [https://echo-production-aa12.up.railway.app/](https://echo-production-aa12.up.railway.app/)
+
 Echo is a from-scratch voice AI pipeline built for sub-second, natural conversational interactions. It captures speech from the browser microphone, converts it to text, streams it to an LLM for response generation, splits the tokens into sentences, synthesizes audio in parallel, and plays it back sequentially through Web Audio — all without relying on heavy all-in-one proprietary voice SDKs.
 
 ## Tech Stack
