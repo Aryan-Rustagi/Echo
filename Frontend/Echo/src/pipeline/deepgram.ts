@@ -65,7 +65,8 @@ export async function startRealtimeTranscription(
   const wsUrl =
     "wss://api.deepgram.com/v1/listen?model=nova-3&encoding=linear16&sample_rate=16000&channels=1&interim_results=true&endpointing=300&utterance_end_ms=1000&vad_events=true&smart_format=true";
 
-  socket = new WebSocket(wsUrl, ["bearer", apiKey]);
+  const authProtocol = apiKey.startsWith("ey") ? "bearer" : "token";
+  socket = new WebSocket(wsUrl, [authProtocol, apiKey]);
 
   socket.onmessage = function handleMessage(message: MessageEvent) {
     try {

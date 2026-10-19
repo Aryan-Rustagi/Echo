@@ -18,7 +18,7 @@ let nextItemId = 1;
 let onFirstAudioCallback: (() => void) | null = null;
 let firstAudioFired = false;
 let queueDrainResolvers: (() => void)[] = [];
-let selectedProvider: TtsProvider = "browser";
+let selectedProvider: TtsProvider = "elevenlabs";
 
 export function setTtsProvider(provider: TtsProvider): void {
   selectedProvider = provider;
@@ -71,16 +71,24 @@ function loadVoices(): Promise<SpeechSynthesisVoice[]> {
 
 export function speakWithBrowserTTS(text: string): Promise<void> {
   return new Promise(async function handleSpeech(resolve) {
-    if (!window.speechSynthesis) {
+    if (typeof window === "undefined" || !window.speechSynthesis) {
       return resolve();
     }
 
-    window.speechSynthesis.cancel();
+    try {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+    } catch (_e) {
+      // ignore
+    }
+
     const voices = await loadVoices();
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "en-US";
     utterance.rate = 1.0;
+    utterance.volume = 1.0;
 
     let preferredVoice: SpeechSynthesisVoice | undefined;
     for (let i = 0; i < voices.length; i += 1) {
@@ -116,11 +124,6 @@ export function speakWithBrowserTTS(text: string): Promise<void> {
     const watchdogMs = text.length * 90 + 3000;
     const watchdogTimer = setTimeout(function handleWatchdog() {
       console.warn("[TTS] Browser SpeechSynthesis watchdog triggered for text:", text.slice(0, 30));
-      try {
-        window.speechSynthesis.cancel();
-      } catch (_e) {
-        // ignore
-      }
       complete();
     }, watchdogMs);
 
@@ -133,7 +136,14 @@ export function speakWithBrowserTTS(text: string): Promise<void> {
       complete();
     };
 
-    window.speechSynthesis.speak(utterance);
+    try {
+      window.speechSynthesis.speak(utterance);
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+    } catch (_speakErr) {
+      complete();
+    }
   });
 }
 

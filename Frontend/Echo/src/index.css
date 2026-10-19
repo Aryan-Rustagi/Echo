@@ -1,12 +1,258 @@
-/* Reset only — all app styles live in App.css */
+/* ==========================================================================
+   ECHO DESIGN SYSTEM — THEME TOKENS & RESET
+   Sophisticated charcoal dark mode + warm cream/ivory light mode
+   ========================================================================== */
+
+:root,
+[data-theme="dark"] {
+  /* Dark Mode Palette (Charcoal & Warm Champagne) */
+  --echo-bg-main: #252722;
+  --echo-bg-surface: #2D2E28;
+  --echo-bg-surface-elevated: #353630;
+  --echo-bg-card: #2D2E28;
+  --echo-bg-input: #1F201C;
+  --echo-bg-hover: rgba(217, 200, 165, 0.08);
+  --echo-bg-active: rgba(217, 200, 165, 0.14);
+
+  --echo-text-primary: #F2EDE2;
+  --echo-text-secondary: #C5C4BB;
+  --echo-text-muted: #8E8D84;
+  --echo-text-disabled: #63645C;
+
+  --echo-border-subtle: #45463F;
+  --echo-border-strong: #5C5D54;
+  --echo-border-focus: #D9C8A5;
+
+  --echo-accent: #D9C8A5;
+  --echo-accent-hover: #E5D7B8;
+  --echo-accent-active: #C9B792;
+  --echo-accent-subtle: rgba(217, 200, 165, 0.12);
+  --echo-accent-contrast: #252722;
+
+  --echo-success: #6EE7B7;
+  --echo-success-bg: rgba(110, 231, 183, 0.12);
+  --echo-success-border: rgba(110, 231, 183, 0.28);
+
+  --echo-warning: #FCD34D;
+  --echo-warning-bg: rgba(252, 211, 77, 0.12);
+  --echo-warning-border: rgba(252, 211, 77, 0.28);
+
+  --echo-danger: #F87171;
+  --echo-danger-bg: rgba(248, 113, 113, 0.12);
+  --echo-danger-border: rgba(248, 113, 113, 0.28);
+
+  --echo-info: #7DD3FC;
+  --echo-info-bg: rgba(125, 211, 252, 0.12);
+  --echo-info-border: rgba(125, 211, 252, 0.28);
+
+  --echo-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.25);
+  --echo-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.3);
+  --echo-shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.4);
+
+  --echo-scrollbar-track: #1F201C;
+  --echo-scrollbar-thumb: #45463F;
+  --echo-scrollbar-thumb-hover: #5C5D54;
+
+  /* Backward Compatibility Aliases for Studio */
+  --bg-cosmos: var(--echo-bg-main);
+  --bg-surface: var(--echo-bg-surface);
+  --bg-surface-elevated: var(--echo-bg-surface-elevated);
+  --bg-card: var(--echo-bg-card);
+  --border-subtle: var(--echo-border-subtle);
+  --border-hover: var(--echo-border-strong);
+  --border-accent: var(--echo-accent-subtle);
+  --text-main: var(--echo-text-primary);
+  --text-muted: var(--echo-text-secondary);
+  --text-subtle: var(--echo-text-muted);
+  --text-dark: var(--echo-text-disabled);
+  --accent-cyan: var(--echo-accent);
+  --accent-cyan-glow: var(--echo-accent-subtle);
+  --accent-indigo: var(--echo-accent);
+  --accent-indigo-glow: var(--echo-accent-subtle);
+  --accent-violet: var(--echo-accent);
+  --accent-emerald: var(--echo-success);
+  --accent-emerald-glow: var(--echo-success-bg);
+  --accent-amber: var(--echo-warning);
+  --accent-amber-glow: var(--echo-warning-bg);
+  --accent-rose: var(--echo-danger);
+  --accent-rose-glow: var(--echo-danger-bg);
+}
+
+[data-theme="light"] {
+  /* Light Mode Palette (Warm Cream, Ivory & Rich Brass) */
+  --echo-bg-main: #F3EEE3;
+  --echo-bg-surface: #EAE4D8;
+  --echo-bg-surface-elevated: #E2DBD0;
+  --echo-bg-card: #FAF7F0;
+  --echo-bg-input: #FFFFFF;
+  --echo-bg-hover: rgba(164, 138, 92, 0.08);
+  --echo-bg-active: rgba(164, 138, 92, 0.14);
+
+  --echo-text-primary: #292923;
+  --echo-text-secondary: #656257;
+  --echo-text-muted: #918D80;
+  --echo-text-disabled: #ABA699;
+
+  --echo-border-subtle: #D8D1C4;
+  --echo-border-strong: #BCB4A4;
+  --echo-border-focus: #A48A5C;
+
+  --echo-accent: #A48A5C;
+  --echo-accent-hover: #8F764B;
+  --echo-accent-active: #7A633B;
+  --echo-accent-subtle: rgba(164, 138, 92, 0.12);
+  --echo-accent-contrast: #FFFFFF;
+
+  --echo-success: #059669;
+  --echo-success-bg: rgba(5, 150, 105, 0.1);
+  --echo-success-border: rgba(5, 150, 105, 0.24);
+
+  --echo-warning: #D97706;
+  --echo-warning-bg: rgba(217, 119, 6, 0.1);
+  --echo-warning-border: rgba(217, 119, 6, 0.24);
+
+  --echo-danger: #DC2626;
+  --echo-danger-bg: rgba(220, 38, 38, 0.1);
+  --echo-danger-border: rgba(220, 38, 38, 0.24);
+
+  --echo-info: #0284C7;
+  --echo-info-bg: rgba(2, 132, 199, 0.1);
+  --echo-info-border: rgba(2, 132, 199, 0.24);
+
+  --echo-shadow-sm: 0 1px 3px rgba(41, 41, 35, 0.06);
+  --echo-shadow-md: 0 4px 14px rgba(41, 41, 35, 0.09);
+  --echo-shadow-lg: 0 12px 36px rgba(41, 41, 35, 0.12);
+
+  --echo-scrollbar-track: #EAE4D8;
+  --echo-scrollbar-thumb: #D8D1C4;
+  --echo-scrollbar-thumb-hover: #BCB4A4;
+
+  /* Backward Compatibility Aliases for Studio in Light Mode */
+  --bg-cosmos: var(--echo-bg-main);
+  --bg-surface: var(--echo-bg-surface);
+  --bg-surface-elevated: var(--echo-bg-surface-elevated);
+  --bg-card: var(--echo-bg-card);
+  --border-subtle: var(--echo-border-subtle);
+  --border-hover: var(--echo-border-strong);
+  --border-accent: var(--echo-accent-subtle);
+  --text-main: var(--echo-text-primary);
+  --text-muted: var(--echo-text-secondary);
+  --text-subtle: var(--echo-text-muted);
+  --text-dark: var(--echo-text-disabled);
+  --accent-cyan: var(--echo-accent);
+  --accent-cyan-glow: var(--echo-accent-subtle);
+  --accent-indigo: var(--echo-accent);
+  --accent-indigo-glow: var(--echo-accent-subtle);
+  --accent-violet: var(--echo-accent);
+  --accent-emerald: var(--echo-success);
+  --accent-emerald-glow: var(--echo-success-bg);
+  --accent-amber: var(--echo-warning);
+  --accent-amber-glow: var(--echo-warning-bg);
+  --accent-rose: var(--echo-danger);
+  --accent-rose-glow: var(--echo-danger-bg);
+}
+
+/* ==========================================================================
+   Shared Typography & Spacing System
+   ========================================================================== */
+:root {
+  --echo-font-sans: "Inter", "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --echo-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --echo-radius-xs: 4px;
+  --echo-radius-sm: 6px;
+  --echo-radius-md: 10px;
+  --echo-radius-lg: 14px;
+  --echo-radius-xl: 20px;
+  --echo-radius-full: 9999px;
+
+  --echo-transition: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  --echo-transition-theme: background-color 200ms ease, border-color 200ms ease, color 150ms ease;
+
+  --font-main: var(--echo-font-sans);
+  --font-mono: var(--echo-font-mono);
+  --radius-sm: var(--echo-radius-sm);
+  --radius-md: var(--echo-radius-md);
+  --radius-lg: var(--echo-radius-lg);
+  --radius-xl: var(--echo-radius-xl);
+}
+
+/* Modern Reset */
 *,
 *::before,
 *::after {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: var(--echo-font-sans);
+  background-color: var(--echo-bg-main);
+  color: var(--echo-text-primary);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+  transition: var(--echo-transition-theme);
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background-color: var(--echo-bg-main);
+  color: var(--echo-text-primary);
+  overflow-x: hidden;
+  line-height: 1.5;
+  transition: var(--echo-transition-theme);
 }
 
 #root {
-  max-width: 100%;
-  margin: 0 auto;
-  min-height: 100svh;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--echo-scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--echo-scrollbar-thumb);
+  border-radius: var(--echo-radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--echo-scrollbar-thumb-hover);
+}
+
+::selection {
+  background: var(--echo-accent-subtle);
+  color: var(--echo-text-primary);
+}
+
+/* Accessibility Focus Ring */
+:focus-visible {
+  outline: 2px solid var(--echo-border-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

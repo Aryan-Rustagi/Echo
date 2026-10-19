@@ -18,7 +18,7 @@ export async function getResponse(
     },
     body: JSON.stringify({
       messages: messages,
-      provider: provider || "gemini",
+      provider: provider || "openai",
     }),
   });
 
@@ -46,7 +46,7 @@ export async function streamResponse(
   const requestController = new AbortController();
   const timeout = setTimeout(function abortStalledStream() {
     requestController.abort();
-  }, 2500);
+  }, 12000);
   const abortRequest = function abortRequest() {
     requestController.abort();
   };
@@ -61,7 +61,7 @@ export async function streamResponse(
       },
       body: JSON.stringify({
         messages: messages,
-        provider: provider || "gemini",
+        provider: provider || "openai",
       }),
       signal: requestController.signal,
     });

@@ -6,6 +6,8 @@ const transcribeRoute = require("./routes/transcribe");
 const chatRoute = require("./routes/chat");
 const ttsRoute = require("./routes/tts");
 const sttKeysRoute = require("./routes/stt-keys");
+const authRoute = require("./routes/auth");
+const { optionalAuth } = require("./middleware/auth");
 
 let rateLimit;
 try {
@@ -52,6 +54,8 @@ const corsOptions = {
   origin: function validateOrigin(origin, callback) {
     if (
       !origin ||
+      origin.startsWith("http://localhost:") ||
+      origin.startsWith("http://127.0.0.1:") ||
       allowedOrigins.indexOf(origin) !== -1 ||
       allowedOrigins.indexOf("*") !== -1 ||
       origin.endsWith(".up.railway.app") ||
@@ -95,15 +99,18 @@ app.get("/api/health", function handleHealth(req, res) {
       deepgram: Boolean(process.env.DEEPGRAM_API_KEY),
       speechmatics: Boolean(process.env.SPEECHMATICS_API_KEY),
       elevenlabs: Boolean(process.env.ELEVENLABS_API_KEY),
+      jwtAuth: true,
+      sessionTokenDuration: "7d",
     },
   });
 });
 
 // API Routes
+app.use("/api/auth", authRoute);
 app.use("/api/transcribe", transcribeRoute);
-app.use("/api/chat", apiLimiter, chatRoute);
-app.use("/api/tts", apiLimiter, ttsRoute);
-app.use("/api/stt-keys", apiLimiter, sttKeysRoute);
+app.use("/api/chat", apiLimiter, optionalAuth, chatRoute);
+app.use("/api/tts", apiLimiter, optionalAuth, ttsRoute);
+app.use("/api/stt-keys", apiLimiter, optionalAuth, sttKeysRoute);
 
 // Dedicated 404 handler for unmatched API routes
 app.use("/api", function handleApiNotFound(req, res) {

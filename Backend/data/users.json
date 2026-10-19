@@ -1,0 +1,11 @@
+[
+  {
+    "id": "usr_demo_echo_001",
+    "name": "Alex Rivera",
+    "email": "demo@echo.ai",
+    "passwordHash": "$2b$10$992372c04b9614d5b54c26a3aabc73d5$39fd7f0caae40907f63e605263eb76a35a6c1a0c528b2b2cc6f7bfab2275939521751f9deea462c11ac10d277099ecddb304a073c8c02f75e7d9112c2bf74797",
+    "role": "user",
+    "createdAt": "2026-10-16T15:52:42.877Z",
+    "lastLoginAt": null
+  }
+]

@@ -92,7 +92,7 @@ async function synthesizeWithElevenLabs(text) {
   const controller = new AbortController();
   const timeoutId = setTimeout(function handleTimeout() {
     controller.abort();
-  }, 4000);
+  }, 12000);
 
   try {
     const response = await fetch(
@@ -168,8 +168,12 @@ router.post("/", async function (req, res) {
     res.setHeader("X-TTS-Provider", "elevenlabs");
     return res.send(buffer);
   } catch (elevenErr) {
-    console.error("[TTS] ElevenLabs failed:", elevenErr.message);
-    return res.status(500).json({ error: "Speech synthesis failed" });
+    const errMsg = `[TTS] ElevenLabs failed: ${elevenErr.message}\n`;
+    console.error(errMsg);
+    try {
+      require("fs").appendFileSync(require("path").resolve(__dirname, "../server_error.log"), `${new Date().toISOString()} ${errMsg}`);
+    } catch (_e) {}
+    return res.status(500).json({ error: elevenErr.message || "Speech synthesis failed" });
   }
 });
 

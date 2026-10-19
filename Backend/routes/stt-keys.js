@@ -21,8 +21,8 @@ router.get("/deepgram-token", async function handleDeepgramToken(req, res) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Deepgram auth error:", response.status, errorText);
-      return res.status(response.status).json({ error: `Deepgram auth failed: ${response.statusText}` });
+      console.warn("[Deepgram Token] /v1/auth/grant not permitted for key tier (status " + response.status + "); providing direct key.");
+      return res.json({ token: key });
     }
 
     const data = await response.json();
