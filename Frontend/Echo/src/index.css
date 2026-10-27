@@ -1,59 +1,62 @@
 /* ==========================================================================
    ECHO DESIGN SYSTEM — THEME TOKENS & RESET
-   Sophisticated charcoal dark mode + warm cream/ivory light mode
+   Cinematic obsidian dark mode with warm amber accent system
    ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root,
 [data-theme="dark"] {
-  /* Dark Mode Palette (Charcoal & Warm Champagne) */
-  --echo-bg-main: #252722;
-  --echo-bg-surface: #2D2E28;
-  --echo-bg-surface-elevated: #353630;
-  --echo-bg-card: #2D2E28;
-  --echo-bg-input: #1F201C;
-  --echo-bg-hover: rgba(217, 200, 165, 0.08);
-  --echo-bg-active: rgba(217, 200, 165, 0.14);
+  /* Cinematic Obsidian & Harmonic Orange Theme */
+  --echo-bg-main: #080809;
+  --echo-bg-surface: #0E0E10;
+  --echo-bg-surface-elevated: #161618;
+  --echo-bg-card: rgba(14, 14, 16, 0.82);
+  --echo-bg-input: #050506;
+  --echo-bg-hover: rgba(255, 107, 0, 0.07);
+  --echo-bg-active: rgba(255, 107, 0, 0.14);
 
-  --echo-text-primary: #F2EDE2;
-  --echo-text-secondary: #C5C4BB;
-  --echo-text-muted: #8E8D84;
-  --echo-text-disabled: #63645C;
+  --echo-text-primary: #F2F2EE;
+  --echo-text-secondary: #BABAB5;
+  --echo-text-muted: #787874;
+  --echo-text-disabled: #48484A;
 
-  --echo-border-subtle: #45463F;
-  --echo-border-strong: #5C5D54;
-  --echo-border-focus: #D9C8A5;
+  --echo-border-subtle: rgba(255, 255, 255, 0.07);
+  --echo-border-strong: rgba(255, 255, 255, 0.14);
+  --echo-border-focus: #FF6B00;
 
-  --echo-accent: #D9C8A5;
-  --echo-accent-hover: #E5D7B8;
-  --echo-accent-active: #C9B792;
-  --echo-accent-subtle: rgba(217, 200, 165, 0.12);
-  --echo-accent-contrast: #252722;
+  --echo-accent: #FF6B00;
+  --echo-accent-hover: #FF7D1A;
+  --echo-accent-active: #FF9A33;
+  --echo-accent-subtle: rgba(255, 107, 0, 0.12);
+  --echo-accent-contrast: #060606;
 
-  --echo-success: #6EE7B7;
-  --echo-success-bg: rgba(110, 231, 183, 0.12);
-  --echo-success-border: rgba(110, 231, 183, 0.28);
+  --echo-success: #34D399;
+  --echo-success-bg: rgba(52, 211, 153, 0.1);
+  --echo-success-border: rgba(52, 211, 153, 0.25);
 
-  --echo-warning: #FCD34D;
-  --echo-warning-bg: rgba(252, 211, 77, 0.12);
-  --echo-warning-border: rgba(252, 211, 77, 0.28);
+  --echo-warning: #FBBF24;
+  --echo-warning-bg: rgba(251, 191, 36, 0.1);
+  --echo-warning-border: rgba(251, 191, 36, 0.25);
 
   --echo-danger: #F87171;
-  --echo-danger-bg: rgba(248, 113, 113, 0.12);
-  --echo-danger-border: rgba(248, 113, 113, 0.28);
+  --echo-danger-bg: rgba(248, 113, 113, 0.1);
+  --echo-danger-border: rgba(248, 113, 113, 0.25);
 
-  --echo-info: #7DD3FC;
-  --echo-info-bg: rgba(125, 211, 252, 0.12);
-  --echo-info-border: rgba(125, 211, 252, 0.28);
+  --echo-info: #60A5FA;
+  --echo-info-bg: rgba(96, 165, 250, 0.1);
+  --echo-info-border: rgba(96, 165, 250, 0.25);
 
-  --echo-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.25);
-  --echo-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.3);
-  --echo-shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.4);
+  --echo-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --echo-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --echo-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --echo-shadow-accent: 0 0 24px rgba(255, 107, 0, 0.3);
 
-  --echo-scrollbar-track: #1F201C;
-  --echo-scrollbar-thumb: #45463F;
-  --echo-scrollbar-thumb-hover: #5C5D54;
+  --echo-scrollbar-track: #0E0E10;
+  --echo-scrollbar-thumb: #2A2A2E;
+  --echo-scrollbar-thumb-hover: #3A3A3E;
 
-  /* Backward Compatibility Aliases for Studio */
+  /* Backward Compatibility Aliases */
   --bg-cosmos: var(--echo-bg-main);
   --bg-surface: var(--echo-bg-surface);
   --bg-surface-elevated: var(--echo-bg-surface-elevated);
@@ -76,58 +79,82 @@
   --accent-amber-glow: var(--echo-warning-bg);
   --accent-rose: var(--echo-danger);
   --accent-rose-glow: var(--echo-danger-bg);
+
+  /* Extended Color Palette */
+  --echo-bg-void: #030304;
+  --echo-orange-primary: #FF6B00;
+  --echo-orange-hover: #FF7D1A;
+  --echo-orange-active: #FF9A33;
+  --echo-orange-hot: #FF4500;
+  --echo-orange-glow: rgba(255, 107, 0, 0.28);
+  --echo-orange-subtle: rgba(255, 107, 0, 0.10);
+  --echo-orange-border: rgba(255, 107, 0, 0.25);
+
+  --echo-cyan: #06B6D4;
+  --echo-cyan-glow: rgba(6, 182, 212, 0.2);
+  --echo-emerald: #10B981;
+  --echo-emerald-glow: rgba(16, 185, 129, 0.2);
+  --echo-violet: #8B5CF6;
+  --echo-violet-glow: rgba(139, 92, 246, 0.18);
+  --echo-amber: #F59E0B;
+  --echo-amber-glow: rgba(245, 158, 11, 0.2);
+
+  /* Auth Component Aliases */
+  --vp-void-700: #12121A;
+  --vp-paper-muted: #94A3B8;
+  --vp-paper-subtle: #64748B;
+  --vp-cinema-orange: #FF6B00;
 }
 
+/* Light mode permanently eliminated - locked to dark cinematic obsidian */
 [data-theme="light"] {
-  /* Light Mode Palette (Warm Cream, Ivory & Rich Brass) */
-  --echo-bg-main: #F3EEE3;
-  --echo-bg-surface: #EAE4D8;
-  --echo-bg-surface-elevated: #E2DBD0;
-  --echo-bg-card: #FAF7F0;
-  --echo-bg-input: #FFFFFF;
-  --echo-bg-hover: rgba(164, 138, 92, 0.08);
-  --echo-bg-active: rgba(164, 138, 92, 0.14);
+  --echo-bg-main: #080809;
+  --echo-bg-surface: #0E0E10;
+  --echo-bg-surface-elevated: #161618;
+  --echo-bg-card: rgba(14, 14, 16, 0.82);
+  --echo-bg-input: #050506;
+  --echo-bg-hover: rgba(255, 107, 0, 0.07);
+  --echo-bg-active: rgba(255, 107, 0, 0.14);
 
-  --echo-text-primary: #292923;
-  --echo-text-secondary: #656257;
-  --echo-text-muted: #918D80;
-  --echo-text-disabled: #ABA699;
+  --echo-text-primary: #F2F2EE;
+  --echo-text-secondary: #BABAB5;
+  --echo-text-muted: #787874;
+  --echo-text-disabled: #48484A;
 
-  --echo-border-subtle: #D8D1C4;
-  --echo-border-strong: #BCB4A4;
-  --echo-border-focus: #A48A5C;
+  --echo-border-subtle: rgba(255, 255, 255, 0.07);
+  --echo-border-strong: rgba(255, 255, 255, 0.14);
+  --echo-border-focus: #FF6B00;
 
-  --echo-accent: #A48A5C;
-  --echo-accent-hover: #8F764B;
-  --echo-accent-active: #7A633B;
-  --echo-accent-subtle: rgba(164, 138, 92, 0.12);
-  --echo-accent-contrast: #FFFFFF;
+  --echo-accent: #FF6B00;
+  --echo-accent-hover: #FF7D1A;
+  --echo-accent-active: #FF9A33;
+  --echo-accent-subtle: rgba(255, 107, 0, 0.12);
+  --echo-accent-contrast: #060606;
 
-  --echo-success: #059669;
-  --echo-success-bg: rgba(5, 150, 105, 0.1);
-  --echo-success-border: rgba(5, 150, 105, 0.24);
+  --echo-success: #34D399;
+  --echo-success-bg: rgba(52, 211, 153, 0.1);
+  --echo-success-border: rgba(52, 211, 153, 0.25);
 
-  --echo-warning: #D97706;
-  --echo-warning-bg: rgba(217, 119, 6, 0.1);
-  --echo-warning-border: rgba(217, 119, 6, 0.24);
+  --echo-warning: #FBBF24;
+  --echo-warning-bg: rgba(251, 191, 36, 0.1);
+  --echo-warning-border: rgba(251, 191, 36, 0.25);
 
-  --echo-danger: #DC2626;
-  --echo-danger-bg: rgba(220, 38, 38, 0.1);
-  --echo-danger-border: rgba(220, 38, 38, 0.24);
+  --echo-danger: #F87171;
+  --echo-danger-bg: rgba(248, 113, 113, 0.1);
+  --echo-danger-border: rgba(248, 113, 113, 0.25);
 
-  --echo-info: #0284C7;
-  --echo-info-bg: rgba(2, 132, 199, 0.1);
-  --echo-info-border: rgba(2, 132, 199, 0.24);
+  --echo-info: #60A5FA;
+  --echo-info-bg: rgba(96, 165, 250, 0.1);
+  --echo-info-border: rgba(96, 165, 250, 0.25);
 
-  --echo-shadow-sm: 0 1px 3px rgba(41, 41, 35, 0.06);
-  --echo-shadow-md: 0 4px 14px rgba(41, 41, 35, 0.09);
-  --echo-shadow-lg: 0 12px 36px rgba(41, 41, 35, 0.12);
+  --echo-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --echo-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --echo-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.65);
 
-  --echo-scrollbar-track: #EAE4D8;
-  --echo-scrollbar-thumb: #D8D1C4;
-  --echo-scrollbar-thumb-hover: #BCB4A4;
+  --echo-scrollbar-track: #0E0E10;
+  --echo-scrollbar-thumb: #2A2A2E;
+  --echo-scrollbar-thumb-hover: #3A3A3E;
 
-  /* Backward Compatibility Aliases for Studio in Light Mode */
   --bg-cosmos: var(--echo-bg-main);
   --bg-surface: var(--echo-bg-surface);
   --bg-surface-elevated: var(--echo-bg-surface-elevated);
@@ -156,7 +183,7 @@
    Shared Typography & Spacing System
    ========================================================================== */
 :root {
-  --echo-font-sans: "Inter", "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --echo-font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --echo-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --echo-radius-xs: 4px;
@@ -218,8 +245,8 @@ body {
 
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -244,6 +271,7 @@ body {
 :focus-visible {
   outline: 2px solid var(--echo-border-focus);
   outline-offset: 2px;
+  border-radius: 3px;
 }
 
 @media (prefers-reduced-motion: reduce) {

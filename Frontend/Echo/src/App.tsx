@@ -2,10 +2,10 @@ import React, { useState } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import Navbar, { type AppView } from "./components/Navbar";
-import SaaSLandingPage from "./components/SaaSLandingPage";
+import VoicePipelineLanding from "./components/landing/VoicePipelineLanding";
 import LoginPage from "./components/LoginPage";
 import SignupPage from "./components/SignupPage";
-import LandingPage from "./LandingPage";
+import StudioLayout from "./components/studio/StudioLayout";
 import "./App.css";
 import "./Auth.css";
 
@@ -34,15 +34,20 @@ function AppContent() {
         </aside>
       )}
 
-      {/* Navigation header rendered on non-studio views (Studio has its own integrated header) */}
-      {currentView !== "studio" && (
+      {/* Navigation header rendered on login/signup views */}
+      {(currentView === "login" || currentView === "signup") && (
         <Navbar currentView={currentView} onNavigate={setCurrentView} />
       )}
 
       {/* Main View Router */}
       <main className="echo-app-main">
         {currentView === "landing" && (
-          <SaaSLandingPage onNavigate={setCurrentView} />
+          <VoicePipelineLanding
+            onNavigate={setCurrentView}
+            onNavigateToStudio={function handleGoToStudio() {
+              setCurrentView("studio");
+            }}
+          />
         )}
 
         {currentView === "login" && (
@@ -54,10 +59,7 @@ function AppContent() {
         )}
 
         {currentView === "studio" && (
-          <LandingPage
-            onNavigate={setCurrentView}
-            initialView="studio"
-          />
+          <StudioLayout onNavigate={setCurrentView} />
         )}
       </main>
     </div>

@@ -182,18 +182,4 @@ router.post("/logout", authenticateToken, function handleLogout(req, res) {
   });
 });
 
-/**
- * GET /api/auth/demo-credentials
- * Helper endpoint for testing & one-click quick login in the UI
- */
-router.get("/demo-credentials", function handleDemoCredentials(req, res) {
-  return res.status(200).json({
-    email: "demo@echo.ai",
-    password: "Password123!",
-    name: "Alex Rivera",
-    role: "user",
-    description: "Pre-configured demo account with 7-day JWT access",
-  });
-});
-
 module.exports = router;

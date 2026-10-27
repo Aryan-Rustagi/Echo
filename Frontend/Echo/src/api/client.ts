@@ -72,6 +72,18 @@ apiClient.interceptors.response.use(
   }
 );
 
+// Guarantee standard Axios helper methods exist on apiClient
+if (typeof (apiClient as any).post !== "function") {
+  (apiClient as any).post = function post<T = any>(url: string, data?: any, config?: any) {
+    return apiClient.request<T>({ ...(config || {}), method: "POST", url, data });
+  };
+}
+if (typeof (apiClient as any).get !== "function") {
+  (apiClient as any).get = function get<T = any>(url: string, config?: any) {
+    return apiClient.request<T>({ ...(config || {}), method: "GET", url });
+  };
+}
+
 /**
  * Read stored JWT token
  */
@@ -216,15 +228,5 @@ export const authApi = {
     } finally {
       clearStoredSession();
     }
-  },
-
-  /**
-   * Fetch pre-configured demo credentials
-   */
-  async getDemoCredentials(): Promise<{ email: string; password: string; name: string }> {
-    const res = await apiClient.get<{ email: string; password: string; name: string }>(
-      "/api/auth/demo-credentials"
-    );
-    return res.data;
   },
 };

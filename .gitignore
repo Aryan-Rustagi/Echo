@@ -1,4 +1,9 @@
 node_modules/
 dist/
 .env
+**/.env
+Backend/.env
+*.env
 *.log
+Backend/data/users.json
+Backend/server_error.log

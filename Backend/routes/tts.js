@@ -1,84 +1,58 @@
 const express = require("express");
-const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const os = require("os");
 
 const router = express.Router();
-const modelPath = path.resolve(__dirname, "../voices/en_US-lessac-medium.onnx");
 
-function synthesizeWithPiper(text) {
-  return new Promise(function (resolve, reject) {
-    if (!fs.existsSync(modelPath)) {
-      return reject(new Error("Piper voice model file not found"));
+/**
+ * Split text at a natural sentence boundary before maxChars
+ * @param {string} text
+ * @param {number} maxChars
+ * @returns {string}
+ */
+function splitAtSentenceBoundary(text, maxChars = 500) {
+  const trimmed = text.trim();
+  if (trimmed.length <= maxChars) {
+    return trimmed;
+  }
+
+  // Look for sentence terminators (. ! ?) followed by whitespace or end within maxChars
+  const sub = trimmed.slice(0, maxChars);
+  let lastBoundary = -1;
+  for (let i = sub.length - 1; i >= 0; i -= 1) {
+    const c = sub[i];
+    if (c === "." || c === "!" || c === "?") {
+      if (i === sub.length - 1 || /\s/.test(sub[i + 1])) {
+        lastBoundary = i + 1;
+        break;
+      }
     }
+  }
 
-    const tempWav = path.join(
-      os.tmpdir(),
-      `piper_${Date.now()}_${Math.random().toString(36).slice(2)}.wav`
-    );
+  if (lastBoundary > 0) {
+    return trimmed.slice(0, lastBoundary).trim();
+  }
 
-    const piper = spawn("piper", [
-      "--model",
-      modelPath,
-      "--output_file",
-      tempWav,
-    ]);
+  // If no punctuation boundary found, check comma or semicolon
+  for (let i = sub.length - 1; i >= 0; i -= 1) {
+    const c = sub[i];
+    if ((c === "," || c === ";") && (i === sub.length - 1 || /\s/.test(sub[i + 1]))) {
+      lastBoundary = i + 1;
+      break;
+    }
+  }
 
-    let settled = false;
+  if (lastBoundary > 0) {
+    return trimmed.slice(0, lastBoundary).trim();
+  }
 
-    const timer = setTimeout(function () {
-      if (!settled) {
-        settled = true;
-        piper.kill();
-        if (fs.existsSync(tempWav)) {
-          try {
-            fs.unlinkSync(tempWav);
-          } catch (_e) {}
-        }
-        reject(new Error("Piper synthesis timed out"));
-      }
-    }, 15000);
+  // Fallback to last whitespace before maxChars
+  const lastSpace = sub.lastIndexOf(" ");
+  if (lastSpace > 0) {
+    return trimmed.slice(0, lastSpace).trim();
+  }
 
-    piper.on("error", function (err) {
-      if (!settled) {
-        settled = true;
-        clearTimeout(timer);
-        if (fs.existsSync(tempWav)) {
-          try {
-            fs.unlinkSync(tempWav);
-          } catch (_e) {}
-        }
-        reject(err);
-      }
-    });
-
-    piper.on("close", function (code) {
-      if (!settled) {
-        settled = true;
-        clearTimeout(timer);
-        if (code === 0) {
-          try {
-            const buffer = fs.readFileSync(tempWav);
-            fs.unlinkSync(tempWav);
-            resolve(buffer);
-          } catch (readErr) {
-            reject(readErr);
-          }
-        } else {
-          if (fs.existsSync(tempWav)) {
-            try {
-              fs.unlinkSync(tempWav);
-            } catch (_e) {}
-          }
-          reject(new Error(`Piper exited with code ${code}`));
-        }
-      }
-    });
-
-    piper.stdin.write(text);
-    piper.stdin.end();
-  });
+  return sub;
 }
 
 async function synthesizeWithElevenLabs(text) {
@@ -132,32 +106,15 @@ async function synthesizeWithElevenLabs(text) {
   }
 }
 
-router.post("/", async function (req, res) {
+router.post("/", async function handleTts(req, res) {
   const text = req.body && req.body.text;
   if (!text || typeof text !== "string" || text.trim() === "") {
     return res.status(400).json({ error: "No text provided" });
   }
 
-  // Cap text to 500 characters to prevent API credit exhaustion
-  const sanitizedText = text.trim().slice(0, 500);
-  const provider = req.body && req.body.provider;
+  // Split long text at a sentence boundary instead of naive slice(0, 500)
+  const sanitizedText = splitAtSentenceBoundary(text, 500);
 
-  if (provider === "piper") {
-    if (!fs.existsSync(modelPath)) {
-      return res.status(404).json({ error: "Piper voice model not found on server" });
-    }
-    try {
-      const buffer = await synthesizeWithPiper(sanitizedText);
-      res.setHeader("Content-Type", "audio/wav");
-      res.setHeader("X-TTS-Provider", "piper");
-      return res.send(buffer);
-    } catch (piperErr) {
-      console.error("[TTS] Piper failed:", piperErr.message);
-      return res.status(500).json({ error: "Piper speech synthesis failed" });
-    }
-  }
-
-  // Default to ElevenLabs
   if (!process.env.ELEVENLABS_API_KEY) {
     return res.status(503).json({ error: "ELEVENLABS_API_KEY is not configured on server" });
   }
@@ -171,10 +128,11 @@ router.post("/", async function (req, res) {
     const errMsg = `[TTS] ElevenLabs failed: ${elevenErr.message}\n`;
     console.error(errMsg);
     try {
-      require("fs").appendFileSync(require("path").resolve(__dirname, "../server_error.log"), `${new Date().toISOString()} ${errMsg}`);
+      fs.appendFileSync(path.resolve(__dirname, "../server_error.log"), `${new Date().toISOString()} ${errMsg}`);
     } catch (_e) {}
     return res.status(500).json({ error: elevenErr.message || "Speech synthesis failed" });
   }
 });
 
 module.exports = router;
+module.exports.splitAtSentenceBoundary = splitAtSentenceBoundary;
