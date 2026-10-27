@@ -1,11 +1,20 @@
 [
   {
-    "id": "usr_demo_echo_001",
-    "name": "Alex Rivera",
+    "id": "usr_demo_echo_ai_2026",
+    "name": "Demo Engineer",
     "email": "demo@echo.ai",
-    "passwordHash": "$2b$10$992372c04b9614d5b54c26a3aabc73d5$39fd7f0caae40907f63e605263eb76a35a6c1a0c528b2b2cc6f7bfab2275939521751f9deea462c11ac10d277099ecddb304a073c8c02f75e7d9112c2bf74797",
+    "passwordHash": "$2a$10$AwhR7TOAR/ZAHzzpI75wTeOtEaoZQKxEbGETGvxRtUlhwcI9f5rpu",
     "role": "user",
-    "createdAt": "2026-10-16T15:52:42.877Z",
+    "createdAt": "2026-10-23T10:23:47.454Z",
+    "lastLoginAt": null
+  },
+  {
+    "id": "test_user_1",
+    "name": "Test Engineer",
+    "email": "test@echo.ai",
+    "passwordHash": "$2a$10$ZRWaIehqsvlYp/Azr6jQYeOVSyNTOGndVPunG/.RQ00QtwfgVBXpS",
+    "role": "user",
+    "createdAt": "2026-10-23T10:23:47.761Z",
     "lastLoginAt": null
   }
 ]

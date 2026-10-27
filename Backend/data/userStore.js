@@ -1,27 +1,17 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-
-let bcryptLib;
-try {
-  bcryptLib = require("bcryptjs");
-} catch (e) {
-  bcryptLib = null;
-}
+const bcrypt = require("bcryptjs");
+const neon = require("../db/neon");
 
 const DATA_DIR = path.resolve(__dirname);
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 
 /**
- * Hash password securely with salt
+ * Hash password securely with bcrypt
  */
 function hashPassword(password) {
-  if (bcryptLib && typeof bcryptLib.hashSync === "function") {
-    return bcryptLib.hashSync(password, 10);
-  }
-  const salt = crypto.randomBytes(16).toString("hex");
-  const derivedKey = crypto.scryptSync(password, salt, 64).toString("hex");
-  return `scrypt$${salt}$${derivedKey}`;
+  return bcrypt.hashSync(password, 10);
 }
 
 /**
@@ -29,63 +19,75 @@ function hashPassword(password) {
  */
 function comparePassword(password, storedHash) {
   if (!password || !storedHash) return false;
+  return bcrypt.compareSync(password, storedHash);
+}
 
-  if (storedHash.startsWith("scrypt$")) {
-    const [, salt, originalKey] = storedHash.split("$");
-    if (!salt || !originalKey) return false;
-    const derivedKey = crypto.scryptSync(password, salt, 64).toString("hex");
-    const keyBuf = Buffer.from(derivedKey);
-    const origBuf = Buffer.from(originalKey);
-    if (keyBuf.length !== origBuf.length) return false;
-    return crypto.timingSafeEqual(keyBuf, origBuf);
-  }
-
-  if (bcryptLib && typeof bcryptLib.compareSync === "function") {
-    return bcryptLib.compareSync(password, storedHash);
-  }
-
-  // Fallback for simple legacy test strings if any
-  return false;
+function getSeededUsers() {
+  return [
+    {
+      id: "usr_demo_echo_ai_2026",
+      name: "Demo Engineer",
+      email: "demo@echo.ai",
+      passwordHash: hashPassword("Password123!"),
+      role: "user",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      lastLoginAt: null,
+    },
+    {
+      id: "test_user_1",
+      name: "Test Engineer",
+      email: "test@echo.ai",
+      passwordHash: hashPassword("SecretPassword!1"),
+      role: "user",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      lastLoginAt: null,
+    },
+  ];
 }
 
 /**
- * Load users from disk, ensuring default demo user exists
+ * Load users from disk cache
  */
 function loadUsers() {
+  let users = [];
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
     if (fs.existsSync(USERS_FILE)) {
       const data = fs.readFileSync(USERS_FILE, "utf8");
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) {
+        users = parsed;
+      }
     }
   } catch (err) {
-    console.error("Error reading users file, re-initializing:", err.message);
+    console.error("[UserStore] Error reading users file:", err.message);
+    users = [];
   }
 
-  // Seed default demo user
-  const defaultDemoUser = {
-    id: "usr_demo_echo_001",
-    name: "Alex Rivera",
-    email: "demo@echo.ai",
-    passwordHash: hashPassword("Password123!"),
-    role: "user",
-    createdAt: new Date().toISOString(),
-    lastLoginAt: null,
-  };
-
-  const initialUsers = [defaultDemoUser];
-  try {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(initialUsers, null, 2), "utf8");
-  } catch (writeErr) {
-    console.error("Failed to write initial users file:", writeErr.message);
+  // Ensure default demo and test users exist
+  const seeded = getSeededUsers();
+  let modified = false;
+  for (const s of seeded) {
+    if (!users.some((u) => u.email.toLowerCase() === s.email.toLowerCase() || u.id === s.id)) {
+      users.push(s);
+      modified = true;
+    }
   }
-  return initialUsers;
+
+  if (modified || !fs.existsSync(USERS_FILE)) {
+    try {
+      fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf8");
+    } catch (writeErr) {
+      console.error("[UserStore] Failed to write users file:", writeErr.message);
+    }
+  }
+  return users;
 }
 
 /**
- * Save users array to disk
+ * Save users array to disk cache
  */
 function saveUsers(users) {
   try {
@@ -94,12 +96,50 @@ function saveUsers(users) {
     }
     fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf8");
   } catch (err) {
-    console.error("Failed to persist users to disk:", err.message);
+    console.error("[UserStore] Failed to persist users to disk:", err.message);
   }
 }
 
-// In-memory cache synced with disk
+// In-memory cache synced with disk and Neon PostgreSQL
 let usersCache = loadUsers();
+
+/**
+ * Sync in-memory cache with Neon PostgreSQL
+ */
+async function syncWithNeon() {
+  if (!neon.isAvailable()) return;
+
+  try {
+    const result = await neon.query(
+      "SELECT id, name, email, password_hash, role, created_at, last_login_at FROM users;"
+    );
+
+    if (Array.isArray(result.rows) && result.rows.length > 0) {
+      for (const row of result.rows) {
+        const existingIdx = usersCache.findIndex(u => u.id === row.id || u.email.toLowerCase() === row.email.toLowerCase());
+        const mappedUser = {
+          id: row.id,
+          name: row.name,
+          email: row.email.toLowerCase(),
+          passwordHash: row.password_hash,
+          role: row.role || "user",
+          createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+          lastLoginAt: row.last_login_at ? new Date(row.last_login_at).toISOString() : null,
+        };
+
+        if (existingIdx !== -1) {
+          usersCache[existingIdx] = { ...usersCache[existingIdx], ...mappedUser };
+        } else {
+          usersCache.push(mappedUser);
+        }
+      }
+      saveUsers(usersCache);
+      console.log(`[UserStore] Synced ${result.rows.length} users from Neon PostgreSQL.`);
+    }
+  } catch (err) {
+    console.warn("[UserStore] Neon sync deferred:", err.message);
+  }
+}
 
 const userStore = {
   /**
@@ -112,6 +152,42 @@ const userStore = {
   },
 
   /**
+   * Find user by email async (checks Neon if not found in cache)
+   */
+  async findByEmailAsync(email) {
+    const cached = this.findByEmail(email);
+    if (cached) return cached;
+
+    if (neon.isAvailable()) {
+      try {
+        const normalized = email.trim().toLowerCase();
+        const result = await neon.query(
+          "SELECT id, name, email, password_hash, role, created_at, last_login_at FROM users WHERE LOWER(email) = $1 LIMIT 1;",
+          [normalized]
+        );
+        if (result.rows.length > 0) {
+          const row = result.rows[0];
+          const user = {
+            id: row.id,
+            name: row.name,
+            email: row.email.toLowerCase(),
+            passwordHash: row.password_hash,
+            role: row.role || "user",
+            createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+            lastLoginAt: row.last_login_at ? new Date(row.last_login_at).toISOString() : null,
+          };
+          usersCache.push(user);
+          saveUsers(usersCache);
+          return user;
+        }
+      } catch (err) {
+        console.warn("[UserStore] Neon query error:", err.message);
+      }
+    }
+    return null;
+  },
+
+  /**
    * Find user by ID
    */
   findById(id) {
@@ -120,7 +196,42 @@ const userStore = {
   },
 
   /**
-   * Create a new user
+   * Find user by ID async
+   */
+  async findByIdAsync(id) {
+    const cached = this.findById(id);
+    if (cached) return cached;
+
+    if (neon.isAvailable()) {
+      try {
+        const result = await neon.query(
+          "SELECT id, name, email, password_hash, role, created_at, last_login_at FROM users WHERE id = $1 LIMIT 1;",
+          [id]
+        );
+        if (result.rows.length > 0) {
+          const row = result.rows[0];
+          const user = {
+            id: row.id,
+            name: row.name,
+            email: row.email.toLowerCase(),
+            passwordHash: row.password_hash,
+            role: row.role || "user",
+            createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+            lastLoginAt: row.last_login_at ? new Date(row.last_login_at).toISOString() : null,
+          };
+          usersCache.push(user);
+          saveUsers(usersCache);
+          return user;
+        }
+      } catch (err) {
+        console.warn("[UserStore] Neon query error:", err.message);
+      }
+    }
+    return null;
+  },
+
+  /**
+   * Create a new user (persists to Neon PostgreSQL and local cache)
    */
   createUser({ name, email, password, role = "user" }) {
     const normalizedEmail = email.trim().toLowerCase();
@@ -140,7 +251,44 @@ const userStore = {
 
     usersCache.push(newUser);
     saveUsers(usersCache);
+
+    // Asynchronously insert into Neon PostgreSQL
+    if (neon.isAvailable()) {
+      neon.query(
+        `INSERT INTO users (id, name, email, password_hash, role, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (email) DO UPDATE SET
+           name = EXCLUDED.name,
+           password_hash = EXCLUDED.password_hash;`,
+        [newUser.id, newUser.name, newUser.email, newUser.passwordHash, newUser.role, newUser.createdAt]
+      ).catch(err => {
+        console.error("[UserStore] Async Neon insert error:", err.message);
+      });
+    }
+
     return newUser;
+  },
+
+  /**
+   * Async create user (awaits Neon PostgreSQL write)
+   */
+  async createUserAsync({ name, email, password, role = "user" }) {
+    const user = this.createUser({ name, email, password, role });
+    if (neon.isAvailable()) {
+      try {
+        await neon.query(
+          `INSERT INTO users (id, name, email, password_hash, role, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (email) DO UPDATE SET
+             name = EXCLUDED.name,
+             password_hash = EXCLUDED.password_hash;`,
+          [user.id, user.name, user.email, user.passwordHash, user.role, user.createdAt]
+        );
+      } catch (err) {
+        console.error("[UserStore] Neon write error:", err.message);
+      }
+    }
+    return user;
   },
 
   /**
@@ -159,6 +307,15 @@ const userStore = {
     if (user) {
       user.lastLoginAt = new Date().toISOString();
       saveUsers(usersCache);
+
+      if (neon.isAvailable()) {
+        neon.query(
+          "UPDATE users SET last_login_at = NOW() WHERE id = $1;",
+          [userId]
+        ).catch(err => {
+          console.error("[UserStore] Neon update login error:", err.message);
+        });
+      }
     }
   },
 
@@ -170,6 +327,11 @@ const userStore = {
     const { passwordHash, ...safeUser } = user;
     return safeUser;
   },
+
+  /**
+   * Trigger explicit synchronization with Neon PostgreSQL
+   */
+  syncWithNeon,
 };
 
 module.exports = userStore;

@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const SYSTEM_PROMPT = [
+const DEFAULT_SYSTEM_PROMPT = [
   "You are Echo, a helpful voice assistant.",
   "Use the entire conversation history to answer follow-up questions.",
   "Remember facts the user tells you and use them later.",
@@ -11,6 +11,23 @@ const SYSTEM_PROMPT = [
   "Do not use markdown, bullet points, or emojis.",
   "Do not introduce yourself."
 ].join(" ");
+
+function resolveSystemPrompt(clientPrompt) {
+  if (typeof clientPrompt === "string" && clientPrompt.trim()) {
+    const trimmed = clientPrompt.trim().slice(0, 2500);
+    // Guarantee essential voice safety constraints so speech synthesis stays natural
+    const voiceSafetyRule = " Spoken conversation constraint: Reply in 1-2 concise spoken sentences. Never use markdown, bullet points, asterisks, or emojis.";
+    if (!/markdown|bullet|emoji/i.test(trimmed)) {
+      return trimmed + voiceSafetyRule;
+    }
+    return trimmed;
+  }
+  return DEFAULT_SYSTEM_PROMPT;
+}
+
+const MAX_MESSAGES = 20;
+const PER_MESSAGE_CAP = 4000;
+const TOTAL_CHAR_BUDGET = 16000;
 
 function cleanMessages(rawMessages) {
   if (!Array.isArray(rawMessages)) {
@@ -41,12 +58,24 @@ function cleanMessages(rawMessages) {
 
     cleaned.push({
       role: role,
-      content: trimmed.slice(0, 1000),
+      content: trimmed.slice(0, PER_MESSAGE_CAP),
     });
   }
 
-  // Keep the last 8 valid messages
-  return cleaned.slice(-8);
+  const recent = cleaned.slice(-MAX_MESSAGES);
+  const budgeted = [];
+  let totalChars = 0;
+
+  for (let i = recent.length - 1; i >= 0; i -= 1) {
+    const msg = recent[i];
+    if (totalChars + msg.content.length > TOTAL_CHAR_BUDGET && budgeted.length > 0) {
+      break;
+    }
+    budgeted.unshift(msg);
+    totalChars += msg.content.length;
+  }
+
+  return budgeted;
 }
 
 function formatGeminiContents(cleaned) {
@@ -80,13 +109,14 @@ function formatGeminiContents(cleaned) {
 }
 
 // Call Google Gemini Flash (non-streaming)
-async function callGeminiNonStreaming(cleaned) {
+async function callGeminiNonStreaming(cleaned, systemPrompt) {
   const geminiKey = process.env.GEMINI_API_KEY;
   if (!geminiKey) {
     throw new Error("GEMINI_API_KEY is not configured in .env");
   }
 
-  const geminiModel = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+  const activePrompt = resolveSystemPrompt(systemPrompt);
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-flash-latest";
   const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`;
   const geminiContents = formatGeminiContents(cleaned);
 
@@ -98,7 +128,7 @@ async function callGeminiNonStreaming(cleaned) {
     },
     body: JSON.stringify({
       system_instruction: {
-        parts: [{ text: SYSTEM_PROMPT }],
+        parts: [{ text: activePrompt }],
       },
       contents: geminiContents,
       generationConfig: {
@@ -127,13 +157,14 @@ async function callGeminiNonStreaming(cleaned) {
 }
 
 // Call OpenAI / Groq (non-streaming)
-async function callOpenAINonStreaming(cleaned) {
+async function callOpenAINonStreaming(cleaned, systemPrompt) {
   const isGroq = Boolean(process.env.GROQ_API_KEY);
   const apiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("Neither GROQ_API_KEY nor OPENAI_API_KEY is configured in .env");
   }
 
+  const activePrompt = resolveSystemPrompt(systemPrompt);
   const url = isGroq
     ? "https://api.groq.com/openai/v1/chat/completions"
     : "https://api.openai.com/v1/chat/completions";
@@ -142,7 +173,7 @@ async function callOpenAINonStreaming(cleaned) {
     : (process.env.OPENAI_MODEL || "gpt-4o-mini");
 
   const payloadMessages = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: activePrompt },
     ...cleaned,
   ];
 
@@ -173,13 +204,14 @@ async function callOpenAINonStreaming(cleaned) {
 }
 
 // Stream Google Gemini Flash (Server-Sent Events)
-async function streamGemini(cleaned, res, abortSignal) {
+async function streamGemini(cleaned, res, abortSignal, systemPrompt) {
   const geminiKey = process.env.GEMINI_API_KEY;
   if (!geminiKey) {
     throw new Error("GEMINI_API_KEY is not configured in .env");
   }
 
-  const geminiModel = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+  const activePrompt = resolveSystemPrompt(systemPrompt);
+  const geminiModel = process.env.GEMINI_MODEL || "gemini-flash-latest";
   const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:streamGenerateContent?alt=sse`;
   const geminiContents = formatGeminiContents(cleaned);
 
@@ -192,7 +224,7 @@ async function streamGemini(cleaned, res, abortSignal) {
     },
     body: JSON.stringify({
       system_instruction: {
-        parts: [{ text: SYSTEM_PROMPT }],
+        parts: [{ text: activePrompt }],
       },
       contents: geminiContents,
       generationConfig: {
@@ -269,13 +301,14 @@ async function streamGemini(cleaned, res, abortSignal) {
 }
 
 // Stream OpenAI / Groq (Server-Sent Events)
-async function streamOpenAI(cleaned, res, abortSignal) {
+async function streamOpenAI(cleaned, res, abortSignal, systemPrompt) {
   const isGroq = Boolean(process.env.GROQ_API_KEY);
   const apiKey = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("Neither GROQ_API_KEY nor OPENAI_API_KEY is configured in .env");
   }
 
+  const activePrompt = resolveSystemPrompt(systemPrompt);
   const url = isGroq
     ? "https://api.groq.com/openai/v1/chat/completions"
     : "https://api.openai.com/v1/chat/completions";
@@ -284,7 +317,7 @@ async function streamOpenAI(cleaned, res, abortSignal) {
     : (process.env.OPENAI_MODEL || "gpt-4o-mini");
 
   const payloadMessages = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: activePrompt },
     ...cleaned,
   ];
 
@@ -386,57 +419,9 @@ function resolveProvider(requested) {
   return "gemini";
 }
 
-function generateFallbackChatResponse(cleaned) {
-  const lastMsg = cleaned[cleaned.length - 1];
-  const query = (lastMsg && lastMsg.content ? lastMsg.content : "").toLowerCase();
-
-  if (/2\s*\+\s*2/.test(query)) {
-    return "Two plus two is four.";
-  }
-  if (/hello|hi\b|hey\b/.test(query)) {
-    return "Hello! I am Echo, your real-time voice assistant. How can I help you today?";
-  }
-  if (/how are you/.test(query)) {
-    return "I am doing great and ready to help you with voice queries!";
-  }
-  if (/joke/.test(query)) {
-    return "Why do programmers prefer dark mode? Because light attracts bugs!";
-  }
-  if (/who are you|what are you/.test(query)) {
-    return "I am Echo, a sub-second voice AI assistant built for real-time conversation.";
-  }
-  if (/architecture|latency|pipeline/.test(query)) {
-    return "Echo streams audio through speech recognition, chunks tokens at punctuation, and synthesizes speech in parallel.";
-  }
-  if (/what is your name/.test(query)) {
-    return "My name is Echo, your streaming voice assistant.";
-  }
-
-  return `You asked "${lastMsg && lastMsg.content ? lastMsg.content.slice(0, 50) : "a question"}". The Echo voice pipeline is working smoothly with end-to-end speech and audio synthesis!`;
-}
-
-async function streamFallbackResponse(text, res, abortSignal) {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders?.();
-
-  const words = text.split(" ");
-  for (let i = 0; i < words.length; i += 1) {
-    if (abortSignal && abortSignal.aborted) {
-      break;
-    }
-    const token = words[i] + (i < words.length - 1 ? " " : "");
-    res.write(`data: ${JSON.stringify({ token: token })}\n\n`);
-    await new Promise((r) => setTimeout(r, 40));
-  }
-  res.write("data: [DONE]\n\n");
-  return res.end();
-}
-
 // 1. Non-streaming chat route
 router.post("/", async function handleChat(req, res) {
-  let { messages, message, provider } = req.body;
+  let { messages, message, provider, systemPrompt } = req.body;
 
   if (!messages && typeof message === "string" && message.trim()) {
     messages = [{ role: "user", content: message }];
@@ -451,30 +436,57 @@ router.post("/", async function handleChat(req, res) {
 
   if (targetProvider === "gemini") {
     try {
-      const reply = await callGeminiNonStreaming(cleaned);
+      const reply = await callGeminiNonStreaming(cleaned, systemPrompt);
       return res.json({ reply: reply });
     } catch (geminiErr) {
-      console.warn("[Chat] Gemini failed, falling back to OpenAI:", geminiErr.message);
+      console.warn("[Chat] Gemini failed, falling back to OpenAI/Groq:", geminiErr.message);
+    }
+
+    try {
+      const reply = await callOpenAINonStreaming(cleaned, systemPrompt);
+      return res.json({ reply: reply });
+    } catch (openAiErr) {
+      const errMsg = `[Chat] All providers failed: ${openAiErr.message}\n`;
+      console.error(errMsg);
+      try {
+        require("fs").appendFileSync(require("path").resolve(__dirname, "../server_error.log"), `${new Date().toISOString()} ${errMsg}`);
+      } catch (_e) {}
+      return res.status(502).json({
+        error: "All LLM providers failed to generate a response: " + openAiErr.message,
+        provider: targetProvider,
+      });
     }
   }
 
+  // targetProvider === "openai"
   try {
-    const reply = await callOpenAINonStreaming(cleaned);
+    const reply = await callOpenAINonStreaming(cleaned, systemPrompt);
     return res.json({ reply: reply });
   } catch (openAiErr) {
-    const errMsg = `[Chat] OpenAI/Groq failed (${openAiErr.message}), activating conversational fallback.\n`;
-    console.warn(errMsg);
+    console.warn("[Chat] OpenAI/Groq failed, attempting Gemini fallback:", openAiErr.message);
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const reply = await callGeminiNonStreaming(cleaned, systemPrompt);
+        return res.json({ reply: reply });
+      } catch (geminiErr) {
+        console.warn("[Chat] Gemini fallback also failed:", geminiErr.message);
+      }
+    }
+    const errMsg = `[Chat] All providers failed: ${openAiErr.message}\n`;
+    console.error(errMsg);
     try {
       require("fs").appendFileSync(require("path").resolve(__dirname, "../server_error.log"), `${new Date().toISOString()} ${errMsg}`);
     } catch (_e) {}
-    const fallbackReply = generateFallbackChatResponse(cleaned);
-    return res.json({ reply: fallbackReply });
+    return res.status(502).json({
+      error: "All LLM providers failed to generate a response: " + openAiErr.message,
+      provider: targetProvider,
+    });
   }
 });
 
 // 2. Streaming chat route (Server-Sent Events)
 router.post("/stream", async function handleChatStream(req, res) {
-  let { messages, message, provider } = req.body;
+  let { messages, message, provider, systemPrompt } = req.body;
 
   if (!messages && typeof message === "string" && message.trim()) {
     messages = [{ role: "user", content: message }];
@@ -494,7 +506,7 @@ router.post("/stream", async function handleChatStream(req, res) {
 
   if (targetProvider === "gemini") {
     try {
-      await streamGemini(cleaned, res, abortController.signal);
+      await streamGemini(cleaned, res, abortController.signal, systemPrompt);
       return;
     } catch (geminiErr) {
       if (abortController.signal.aborted) {
@@ -506,23 +518,55 @@ router.post("/stream", async function handleChatStream(req, res) {
       }
       console.warn("[Chat Stream] Gemini stream failed, falling back to OpenAI stream:", geminiErr.message);
     }
+
+    try {
+      await streamOpenAI(cleaned, res, abortController.signal, systemPrompt);
+      return;
+    } catch (openAiErr) {
+      if (abortController.signal.aborted) {
+        return;
+      }
+      const errMsg = `[Chat Stream] All providers failed: ${openAiErr.message}\n`;
+      console.error(errMsg);
+      try {
+        require("fs").appendFileSync(require("path").resolve(__dirname, "../server_error.log"), `${new Date().toISOString()} ${errMsg}`);
+      } catch (_e) {}
+      if (!res.headersSent) {
+        return res.status(502).json({
+          error: "All LLM providers failed to stream a response: " + openAiErr.message,
+          provider: targetProvider,
+        });
+      }
+      return res.end();
+    }
   }
 
+  // targetProvider === "openai"
   try {
-    await streamOpenAI(cleaned, res, abortController.signal);
+    await streamOpenAI(cleaned, res, abortController.signal, systemPrompt);
   } catch (openAiErr) {
     if (abortController.signal.aborted) {
       return;
     }
-    const errMsg = `[Chat Stream] OpenAI/Groq stream failed (${openAiErr.message}), activating streaming conversational fallback.\n`;
-    console.warn(errMsg);
+    if (!res.headersSent && process.env.GEMINI_API_KEY) {
+      console.warn("[Chat Stream] OpenAI stream failed, attempting Gemini fallback:", openAiErr.message);
+      try {
+        await streamGemini(cleaned, res, abortController.signal, systemPrompt);
+        return;
+      } catch (geminiErr) {
+        console.warn("[Chat Stream] Gemini fallback also failed:", geminiErr.message);
+      }
+    }
+    const errMsg = `[Chat Stream] All providers failed: ${openAiErr.message}\n`;
+    console.error(errMsg);
     try {
       require("fs").appendFileSync(require("path").resolve(__dirname, "../server_error.log"), `${new Date().toISOString()} ${errMsg}`);
     } catch (_e) {}
     if (!res.headersSent) {
-      const fallbackReply = generateFallbackChatResponse(cleaned);
-      await streamFallbackResponse(fallbackReply, res, abortController.signal);
-      return;
+      return res.status(502).json({
+        error: "All LLM providers failed to stream a response: " + openAiErr.message,
+        provider: targetProvider,
+      });
     }
     return res.end();
   }

@@ -13,54 +13,26 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const THEME_STORAGE_KEY = "echo_theme_mode";
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    try {
-      const stored = localStorage.getItem(THEME_STORAGE_KEY);
-      if (stored === "dark" || stored === "light") {
-        return stored;
-      }
-      if (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: light)").matches) {
-        return "light";
-      }
-    } catch {
-      // fallback to dark
-    }
-    return "dark";
-  });
+  const theme: Theme = "dark";
 
   useEffect(() => {
     try {
-      localStorage.setItem(THEME_STORAGE_KEY, theme);
+      localStorage.setItem(THEME_STORAGE_KEY, "dark");
     } catch {
       // storage unavailable
     }
-    document.documentElement.setAttribute("data-theme", theme);
-    document.documentElement.style.colorScheme = theme;
-  }, [theme]);
-
-  // Listen to OS theme changes if user hasn't explicitly set a preference
-  useEffect(() => {
-    try {
-      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const handleChange = (e: MediaQueryListEvent) => {
-        const stored = localStorage.getItem(THEME_STORAGE_KEY);
-        if (!stored) {
-          setThemeState(e.matches ? "dark" : "light");
-        }
-      };
-      mediaQuery.addEventListener("change", handleChange);
-      return () => mediaQuery.removeEventListener("change", handleChange);
-    } catch {
-      // ignore
-    }
+    document.documentElement.setAttribute("data-theme", "dark");
+    document.documentElement.style.colorScheme = "dark";
   }, []);
 
   const toggleTheme = useCallback(() => {
-    setThemeState((prev) => (prev === "dark" ? "light" : "dark"));
+    // Light mode has been permanently removed per design specifications
+    document.documentElement.setAttribute("data-theme", "dark");
   }, []);
 
-  const setTheme = useCallback((nextTheme: Theme) => {
-    setThemeState(nextTheme);
+  const setTheme = useCallback((_nextTheme: Theme) => {
+    // Light mode has been permanently removed per design specifications
+    document.documentElement.setAttribute("data-theme", "dark");
   }, []);
 
   return (

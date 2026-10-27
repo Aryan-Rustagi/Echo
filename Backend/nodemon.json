@@ -1,0 +1,24 @@
+{
+  "watch": [
+    "server.js",
+    "routes",
+    "middleware",
+    "services",
+    "utils",
+    "db"
+  ],
+  "ignore": [
+    "models/*",
+    "bin/*",
+    "temp/*",
+    "data/*",
+    "*.log",
+    "*.test.js",
+    "*.bin",
+    "*.exe",
+    "*.wav"
+  ],
+  "ext": "js,json",
+  "legacyWatch": true,
+  "pollingInterval": 1000
+}

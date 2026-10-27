@@ -4,10 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:backend": "cd Backend && npx nodemon server.js",
+    "dev:backend": "cd Backend && npx nodemon -L server.js",
     "dev:frontend": "cd Frontend/Echo && npm run dev",
     "build": "cd Frontend/Echo && npm run build",
     "start": "cd Backend && node server.js",
+    "test": "cd Backend && npm test",
+    "test:all": "cd Backend && npm test && cd ../Frontend/Echo && npm run build",
     "install:all": "npm install && cd Backend && npm install && cd ../Frontend/Echo && npm install"
   },
   "devDependencies": {

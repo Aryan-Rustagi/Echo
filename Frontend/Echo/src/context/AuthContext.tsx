@@ -3,7 +3,6 @@ import {
   authApi,
   getStoredToken,
   getStoredUser,
-  setStoredSession,
   clearStoredSession,
   inspectTokenLifespan,
   type User,
@@ -22,7 +21,6 @@ interface AuthContextType {
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   dismissNotice: () => void;
-  quickFillDemo: () => Promise<{ email: string; password: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -146,14 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSessionNotice(null);
   }, []);
 
-  const quickFillDemo = useCallback(async () => {
-    try {
-      const creds = await authApi.getDemoCredentials();
-      return { email: creds.email, password: creds.password };
-    } catch (e) {
-      return { email: "demo@echo.ai", password: "Password123!" };
-    }
-  }, []);
+
 
   const value: AuthContextType = {
     user,
@@ -167,7 +158,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signup,
     logout,
     dismissNotice,
-    quickFillDemo,
+
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

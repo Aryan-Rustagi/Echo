@@ -1,3 +1,4 @@
+require("dotenv").config();
 const { signToken, verifyToken, getTokenValidityMeta, SEVEN_DAYS_SECONDS } = require("./utils/jwt");
 const userStore = require("./data/userStore");
 const { authenticateToken, authorizeRoles, verifySevenDaySession } = require("./middleware/auth");

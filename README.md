@@ -13,6 +13,8 @@ Echo is a from-scratch voice AI pipeline built for sub-second, natural conversat
 * **LLM**: Google Gemini Flash (`gemini-flash-latest`) / OpenAI / Groq (`/api/chat/stream` with Server-Sent Events)
 * **TTS**: ElevenLabs Flash v2.5 with Web SpeechSynthesis watchdog fallback
 
+> ⚠️ **SECURITY NOTICE**: Because `.env` was previously committed into git history in earlier revisions of this repository, all API keys (Deepgram, Speechmatics, OpenAI, Gemini, Groq, ElevenLabs, and JWT secrets) must be rotated immediately before production or public use. Never commit sensitive environment files.
+
 ---
 
 ## How It Works
